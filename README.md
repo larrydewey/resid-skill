@@ -17,7 +17,7 @@ references/
   types-and-values.md       numbers, Dec, Str, collections, Option/Result, records, sums
   control-flow.md           if, match, for, loops as tail recursion
   functions-and-closures.md functions, closures, higher-order helpers
-  behaviors.md              Ord/Show/custom behaviors and behavioralizing code
+  behaviors.md              behaviors, generic functions/records, coherence, behavioralizing
   errors-and-results.md     ?, else, error types, aborts
   capabilities-and-security.md  @requires, providers, sandbox, spawn, handles
   testing.md                test blocks, lib/testing.resid, matchers

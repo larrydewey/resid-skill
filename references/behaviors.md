@@ -1,31 +1,76 @@
-# Behaviors
+# Behaviors and generics
 
-A behavior is **compile-time knowledge attached to a type**: "how to order a
-`T`", "how to show a `T`". It is not a trait or interface system (the spec
-lists those as non-goals): there are no method tables, no generic bounds, no
-dynamic dispatch. An instance names a behavior, a type and one ordinary
-function that implements it:
+A behavior is **compile-time knowledge about a type**, stated from outside
+the type: "how to order a `T`", "how to show a `T`". It is not a trait
+system (the spec lists those as non-goals): a type never declares what it
+implements, verbs are plain functions (no methods), nothing dispatches at
+run time, behaviors do not inherit, and a behavior holds no types of its
+own. Every instance is chosen at compile time, before reduction.
 
-```text
-Name(Type) = impl_function;
+## Declaring a behavior and instances
+
+```resid
+type Circle = { Float r; };
+type Square = { Float side; };
+
+behavior Area(T) {
+    Float area(T shape);
+}
+behavior Shape(T) {
+    Float surface(T s);
+    Float perimeter(T s);
+}
+
+Float circle_area(Circle c) { return 3.0 * c.r * c.r; }
+Float sq_area(Square s) { return s.side * s.side; }
+Float sq_perimeter(Square s) { return 4.0 * s.side; }
+Area(Circle) = circle_area;
+Area(Square) = sq_area;
+Shape(Square) = { .surface = sq_area, .perimeter = sq_perimeter };
+
+Int main() {
+    Square s = Square {.side = 3.0};
+    println(f"{area(Circle {.r = 2.0})} {area(s)} {perimeter(s)}");   //> 12 9 12
+    return 0;
+}
 ```
 
-The compiler checks the function's signature, inserts the behavior where it is
-selected, and reduces it like any other known function.
+- Behavior names start uppercase; parameters are single letters; each
+  prototype (no body; there are no default bodies) declares a lowercase verb.
+- An instance gives one function, or a record `{ .verb = f, ... }` naming
+  every verb exactly once. The function must have the prototype's
+  signature with the behavior's parameters replaced by the instance types.
+- A verb call picks the instance from its argument types; a type that
+  appears only in the result comes from where the result goes:
 
-## What exists today
+```resid
+type Celsius = { Float deg; };
+type Kelvin = { Float deg; };
+behavior Convert(A, B) { B convert(A x); }
+Kelvin c_to_k(Celsius c) { return Kelvin {.deg = c.deg + 273.15}; }
+Convert(Celsius, Kelvin) = c_to_k;
 
-| Behavior | Impl signature | Used by |
-|---|---|---|
-| `Ord(T)` | `Int f(T a, T b)` | `sort(xs)` (inserted when it is the unique order for `T`), `sort(xs, using = Ord(T))` |
-| `Reverse(Ord(T))` | (combinator) | flips a comparator: `sort(xs, using = Reverse(Ord(T)))` |
-| `Show(T)` | `Str f(T v)` | every f-string hole of type `T`, including inside records, lists and options |
-| `Ord`/`Eq`/`Hash` for every numeric width, `Ord(Str)` | built in | `sort(xs)` on Int/Float/Str lists |
-| any other name, e.g. `ByPay(T)` | `Int f(T a, T b)` | accepted, but **broken in code generation today** (see below) |
+Int main() {
+    Kelvin k = convert(Celsius {.deg = 0.0});
+    println(f"{k.deg}");   //> 273.15
+    return 0;
+}
+```
 
-Comparator contract: negative if `a` sorts before `b`, 0 if equal, positive
-if after. `sort` kept equal elements in order in tests, but the spec does not
-promise stability.
+## The core behaviors (declared in the prelude)
+
+| Behavior | Verb | Instance signature | Used by |
+|---|---|---|---|
+| `Eq(T)` | `eq` | `Bool f(T a, T b)` | `==`, `!=` on types without built-in equality |
+| `Ord(T)` | `compare` | `Int f(T a, T b)` | `sort`, `Reverse`, `<` `<=` `>` `>=` |
+| `Hash(T)` | `hash` | `Int f(T x)` | the verb |
+| `Show(T)` | `show` | `Str f(T x)` | f-string holes (also nested in records, lists, options) |
+| `Serialize(T)` | `serialize` | `Str f(T x)` | the verb |
+| `Allocator(T)` | `allocate` | `T f()` | the verb |
+
+Numbers and `Str` have built-in instances (`"a" < "b"` works, `compare(1, 2)`
+is `-1`). `Show` cannot be given for numbers, `Bool` or `Str`. A function of
+your own named `show`, `hash`, ... wins over the verb.
 
 ## Ordering: Ord and Reverse
 
@@ -46,37 +91,108 @@ Int main() {
     ];
     println(f"{sort(es)}");                              //> [bo, cy, ann]
     println(f"{sort(es, using = Reverse(Ord(Emp)))}");   //> [ann, cy, bo]
+    println(f"{es[1] < es[2]}");                         //> true
     List(Int) xs = [3, 1, 2];
     println(f"{sort(xs)} {sort(xs, using = Reverse(Ord(Int)))}");   //> [1, 2, 3] [3, 2, 1]
     return 0;
 }
 ```
 
-Rules:
+- One instance per behavior and type; `sort(xs)` inserts it, `using =`
+  selects another: `sort(es, using = by_pay)` with a comparator function.
+- Comparator contract: negative, zero or positive. Beware `a - b` near the
+  Int limits (checked subtraction can abort).
+- An impl that uses capabilities makes every user need them (E0219).
 
-- One `Ord(T)` instance per type; `sort(xs)` inserts it, `using =` selects it
-  explicitly. A duplicated instance declaration fails in clang (`invalid
-  redefinition of function '__cmp_c'`); one impl function may serve several
-  types' instances.
-- Instance types may be any type: `Ord(Int(32)) = desc;`,
-  `Ord(Emp) = ...`, `Show(Level) = ...`.
-- A user instance for a builtin type is used when selected explicitly:
-  after `Ord(Int) = desc;`, `sort(xs, using = Ord(Int))` sorts descending
-  while plain `sort(xs)` keeps the builtin ascending order.
-- Do not define `Show` for builtin types (`Show(Int)`): top-level holes keep
-  the builtin text, but holes inside other `Show` impls start using yours.
-- An impl that uses capabilities makes every `sort` that selects it need them
-  too (E0219: "uses (through `by_run`) capability `process`").
-- **Known issue (commit 79f9062):** a behavior with any name other than `Ord`
-  (`ByPay(Emp) = by_pay; sort(es, using = ByPay(Emp))`, also under
-  `Reverse`) fails in clang with `use of undefined value '@__cmp_by_pay'`
-  unless the same impl is also some type's `Ord` instance. For a second
-  order on a type, sort with a comparator closure (next section).
+## Generic functions and records
 
-### Other orders: comparator closures
+A single uppercase letter in a signature or type declaration is a type
+parameter. `Int(N)`/`UInt(N)`/`Float(N)` range over widths.
 
-`sort` only takes behaviors, so for extra orders write a small stable merge
-sort that takes a comparator closure (monomorphic: one per element type):
+```resid
+type Pair(T) = { T a; T b; };
+
+T first(List(T) xs) { return xs[0]; }
+Int(N) clamp_pos(Int(N) x) { return if (x < 0) { 0 } else { x }; }
+
+@needs(Ord(T))
+T biggest(List(T) xs) { return sort(xs)[xs.len() - 1]; }
+
+List(U) map_all(List(T) xs, U closure(T) f, Int i, ListBuf(U) acc) {
+    if (i >= xs.len()) { return acc.finish(); }
+    return map_all(xs, f, i + 1, acc.push(f(xs[i])));
+}
+
+Int main() {
+    Pair(Int) p = Pair {.a = 1, .b = 2};
+    Int(8) s = -3;
+    println(f"{p} {first(["x"])} {clamp_pos(s)} {biggest([3, 9, 4])}");   //> Pair { a: 1, b: 2 } x 0 9
+    println(f"{map_all([1, 2], lambda(x) { x * 10 }, 0, ListBuf())}");     //> [10, 20]
+    return 0;
+}
+```
+
+- Inside a generic body a `T` is opaque: `sort` on `List(T)` needs
+  `@needs(Ord(T))`, `f"{x}"` needs `Show(T)`, `==` needs `Eq(T)`, `<` needs
+  `Ord(T)`, a verb call needs its behavior (E0226 otherwise).
+- Calls infer parameters from arguments, then the expected type
+  (`List(Int) xs = empty();`); otherwise E0227. Lambdas, `ListBuf()` and
+  `[]` passed to generic calls get their types from the other arguments.
+- Each concrete call calls a copy made before reduction; records get one
+  layout per concrete type. Polymorphic recursion is E0228. Lambdas are not
+  generic; named functions are still not values.
+- Only single letters are parameters: an unknown multi-letter type name is
+  an error ("unknown type `Pint` (did you mean `Point`?)").
+
+### Instances for generic types, derivations, overrides
+
+```resid
+type Pair(T) = { T a; T b; };
+type Task = { Str name; Int p; };
+
+@needs(Show(T))
+Str show_pair(Pair(T) p) { return f"<{p.a}|{p.b}>"; }
+Show(Pair(T)) = show_pair;
+
+Int by_p(Task a, Task b) { return a.p - b.p; }
+Ord(Task) = by_p;
+@needs(Ord(T))
+Bool eq_from_ord(T a, T b) { return compare(a, b) == 0; }
+Eq(Task) = eq_from_ord;
+
+@needs(Ord(T))
+T top(List(T) xs) { return sort(xs)[0]; }
+
+Int main() {
+    Pair(Int) p = Pair {.a = 1, .b = 2};
+    Task a = Task {.name = "a", .p = 1};
+    println(f"{p} {a == Task {.name = "z", .p = 1}} {top([3, 1, 2], using = Reverse(Ord(Int)))}");   //> <1|2> true 3
+    return 0;
+}
+```
+
+`using = f`, `using = B(T)` or `using = Reverse(..)` overrides a behavior at
+one verb call, `sort`, or generic call (the copy uses the override).
+
+## Coherence
+
+- Overlapping instances at one level (`Show(Pair(T))` and
+  `Show(Pair(Int))`) are E0225: no specialization.
+- Levels: application > library > prelude. A higher-level instance
+  replaces a lower one program-wide, library code included (`resid-why prog
+  Show` shows "replaced by").
+- A library may declare instances only of its own behaviors or types
+  (E0224); the application may declare any.
+- A generic function's authority is its own `@requires` plus what its
+  instances need; the concrete caller holds it (E0219 names the copy, e.g.
+  "through `label(Task)`"). A generic declared in a `sandbox` keeps that
+  ceiling in every copy.
+
+## Extra orders at run time: comparator closures
+
+`sort` takes behaviors or named comparators known at compile time. For an
+order chosen at run time, write a small merge sort that takes a comparator
+closure (it can be generic over the element type):
 
 ```resid
 type Row = { Str team; Int score; };
@@ -301,14 +417,3 @@ Int main() {
     return 0;
 }
 ```
-
-## Things behaviors are not
-
-- Not operator overloading: `==`, `+`, `<` keep their builtin meaning and do
-  not look at instances. `Eq(T)`/`Hash(T)` instances are accepted if their
-  impl is `(T, T) -> Int`, but `==` on records still does not compile and
-  map keys hash structurally.
-- Not generic constraints: there is no `T: Ord`. A function that sorts must
-  name a concrete element type.
-- Not runtime values: `using = Ord(T)` must be written at the call; you
-  cannot store a behavior in a variable. Store a closure if you need that.

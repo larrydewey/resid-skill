@@ -98,8 +98,8 @@ Int main() {
 
 ```resid
 //! compile-error: match is not exhaustive
-type C = R | G | B;
-Str n(C c) { return match c { R => "r", G => "g" }; }
+type Rgb = R | G | B;
+Str n(Rgb c) { return match c { R => "r", G => "g" }; }
 ```
 
 ## if-let, while-let, destructuring

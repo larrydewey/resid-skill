@@ -57,8 +57,15 @@ Int main() {
   records `type P = { Int x; Int y; };` built as `P {.x = 1, .y = 2}`.
 - **No reassignment, no shadowing** (not even a parameter name in the body,
   not in nested blocks). Sibling blocks may reuse names. Discard with `_ = e;`.
-- **No globals**: constants are zero-arg functions. No generic functions, no
-  overloading, no methods on types (but `x.f(a)` = `f(x, a)`).
+- **Names have a case**: types, behaviors, variants start uppercase; values,
+  functions, params, fields lowercase (E0222). One uppercase letter (`T`,
+  `N`) is a type parameter, never a type name.
+- **No globals**: constants are zero-arg functions. No overloading, no
+  methods on types (but `x.f(a)` = `f(x, a)`).
+- **Generics**: `T first(List(T) xs)`, `type Pair(T) = { T a; T b; };`,
+  `Int(N)` for any width. A body that sorts/shows/compares a `T` declares
+  `@needs(Ord(T))` etc. **Behaviors**: `behavior Area(T) { Float area(T s); }`,
+  `Area(Circle) = circle_area;`, call `area(c)`. See references/behaviors.md.
 - `if` is an expression (`Int y = if (c) { 1 } else { 2 };`) and then needs
   its `else`. Branches must have identical types.
 - `match` only on sum types (`Option`, `Result`, yours); patterns are flat
@@ -71,8 +78,10 @@ Int main() {
   Widen before multiplying: `(Int(128))a * b`. Use `wrapping_*`/`saturating_*`
   when wrap/clamp is intended.
 - Strings: `+`, `==`, f-strings `f"{any_value}"`; no `s[i]` (use
-  `str_char_at`), no `<` on `Str`, no `{{` escape, no scientific float literals.
-- `==` works on numbers, Bool and `Str` only; compare records/lists by parts.
+  `str_char_at`), `<` on `Str` works (Ord(Str)), no `{{` escape, no
+  scientific float literals.
+- `==` works on numbers, Bool and `Str`, and on types with an `Eq` instance
+  (`<` with `Ord`); compare other records/lists by parts.
 - Lambdas take their type from context (typed binding, parameter, return
   type, field): `Int closure(Int) f = lambda(x) { x + 1 };`. Named functions
   are not values: wrap them (`lambda(x) { g(x) }`).
@@ -81,7 +90,9 @@ Int main() {
 - `println` takes one `Str`. `print`, `eprintln` likewise.
 - Imports are file paths relative to the importing file, falling back to the
   stdlib (`import "crypto.resid";` works anywhere); missing module = E0221.
-  Only `pub` functions are visible.
+  Only `pub` functions are visible. Each module has its own names: when two
+  imports export one, `import "a.resid" as a;` and write `a.f()` (plain `f()`
+  is E0223); your own declarations win.
 - Never call `resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, persist copies:
   compiler internals, rejected with E0220.
 

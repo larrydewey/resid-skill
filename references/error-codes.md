@@ -17,6 +17,13 @@ quoted from the current compiler.
 | E0215 | inside a spawn/restricted region, a call to a function whose `@requires` is not granted there | same as E0214 |
 | E0216 | `import "m" @requires(...)` after `m` was already imported without the bound | import it attenuated first (or only) |
 | E0221 | `cannot find module x.resid imported by ... (looked for ...)` | fix the path; stdlib names like `crypto.resid` resolve through `RESID_HOME/../../lib` |
+| E0222 | `value name \`X\` must start with a lowercase letter` / `type name ... uppercase` / `single uppercase letters are reserved for type parameters` | rename: values lowercase, types uppercase, types longer than one letter |
+| E0223 | `\`f\` is ambiguous: more than one imported module exports it` | `import "m.resid" as m;` and write `m.f`, or import only one |
+| E0224 | `a library may declare instances only of its own behaviors or types` | declare the instance in the application, or in the library owning the type/behavior |
+| E0225 | `overlapping instances: B(X) and B(Y) both cover some type` | one instance per type; no specialization (use `using =` at the call) |
+| E0226 | `sort of T needs Ord(T): add @needs(Ord(T))` / `no behavior instance B(X)` | add the need to the generic function, or declare the instance |
+| E0227 | `cannot infer type parameter T of f` | give the result a declared type (`List(Int) xs = f();`) |
+| E0228 | `instantiation does not terminate: f keeps calling itself at ever larger types` | recurse at one type |
 | E0218 | a provider call in a restricted region whose family is not granted: `provider call family filesystem is not granted to this region's capability set [network]` | grant it or remove the call |
 | E0219 | no ambient authority: `function main uses (through save) capability filesystem but is not granted it: declare @requires(filesystem) on it`; also for `test` blocks | add the named `@requires(...)` to that function, and to each caller up to `main` |
 | E0220 | runtime internal used: `resid_arena_push is a runtime internal of the compiler, not part of the language` | never use `resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, persist copies, `@export`/`@import` |
