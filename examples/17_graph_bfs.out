@@ -1,0 +1,6 @@
+node 1: distance 0
+node 2: distance 1
+node 3: distance 1
+node 4: distance 2
+node 5: distance 3
+reachable: 5 of 7

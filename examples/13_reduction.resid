@@ -1,0 +1,16 @@
+// Compile-time reduction: known inputs are computed by the compiler;
+// only the residual (runtime-dependent) part becomes code.
+Int fib(Int n) { return if (n < 2) { n } else { fib(n - 1) + fib(n - 2) }; }
+Int pow(Int b, Int e) { return if (e == 0) { 1 } else { b * pow(b, e - 1) }; }
+
+@requires(args)
+Int main() {
+    Int f = fib(25);          // folded to 75025 at compile time
+    comptime_print(f);        // printed by the compiler, not the program
+    known(f);                 // compile error if f were residual
+    Int n = args.count();     // provider call: residual
+    Int cube = pow(n + 1, 3); // specialized: pow with e = 3 unrolled
+    Int later = rt 6;         // rt forces a runtime value
+    println(f"{f} {cube} {later * 7}");
+    return 0;
+}

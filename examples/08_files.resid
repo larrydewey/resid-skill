@@ -1,0 +1,30 @@
+// Capabilities: every function that touches a provider needs @requires,
+// and so does every caller up to main. readonly grants cannot write.
+@requires(filesystem)
+Bool save(Str path, Str text) {
+    return filesystem.write_all(path, text);
+}
+
+@requires(filesystem(readonly))
+Int count_lines(Str path) {
+    if (!filesystem.exists(path)) { return -1; }
+    Str body = filesystem.read_all(path);
+    List(Str) lines = str_split(str_trim(body), "\n");
+    return lines.len();
+}
+
+@requires(filesystem)
+Int main() {
+    Str path = "resid_demo_notes.txt";
+    Bool ok = save(path, "alpha\nbeta\ngamma\n");
+    println(f"saved: {ok}");
+    println(f"lines: {count_lines(path)}");
+    println(f"missing: {count_lines("no_such_file.txt")}");
+    List(Int) bytes = filesystem.read_bytes(path);
+    println(f"first byte: {bytes[0]} size: {bytes.len()}");
+    with (File h = filesystem.open(path)) {
+        Str all = filesystem.read_handle(h);
+        println(f"via handle: {str_len(all)} chars");
+    }
+    return 0;
+}

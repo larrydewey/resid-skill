@@ -1,0 +1,36 @@
+// Sum types carry at most one payload each; use a record for more.
+// match must be exhaustive (or end with `_ =>`). Show(T) = f makes
+// f-strings render a T through f.
+type Rect = { Float w; Float h; };
+type Shape = Circle(Float) | Box(Rect) | Dot;
+
+Float area(Shape s) {
+    return match s {
+        Circle(r) => 3.14159 * r * r,
+        Box(b) => b.w * b.h,
+        Dot => 0.0
+    };
+}
+
+Str show_shape(Shape s) {
+    return match s {
+        Circle(r) => f"circle(r={r})",
+        Box(b) => f"box({b.w}x{b.h})",
+        Dot => "dot"
+    };
+}
+Show(Shape) = show_shape;
+
+Float total(List(Shape) xs, Int i, Float acc) {
+    if (i >= xs.len()) { return acc; }
+    return total(xs, i + 1, acc + area(xs[i]));
+}
+
+Int main() {
+    List(Shape) shapes = [Circle(1.0), Box(Rect {.w = 2.0, .h = 3.5}), Dot];
+    for (Shape s in shapes) {
+        println(f"{s} has area {area(s)}");
+    }
+    println(f"total {total(shapes, 0, 0.0)}");
+    return 0;
+}

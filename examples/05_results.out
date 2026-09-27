@@ -1,0 +1,6 @@
+ok 42
+error: not a number: 'zero'
+error: division by zero
+with default: -1
+first even: 8
+no even -> 0

@@ -1,0 +1,14 @@
+// Str(N), Bytes(N), List(T, N): statically sized, never heap-allocated.
+// Literals must fit; capacity changes only by explicit cast.
+Int main() {
+    Str(8) tag = "resid";
+    List(Int, 4) regs = [7, 8];          // slots 2..3 are zero
+    println(tag);                        // builtins accept Str(N) directly
+    println(f"{regs[0]} {regs[3]} len={regs.len()}");
+    Str heap = "a longer heap string";
+    Str(6) cut = (Str(6))heap;           // bounded copy, keeps a prefix
+    println((Str)cut);                   // cast back for user functions
+    List(Int) dyn = (List(Int))regs;     // copy to a heap list
+    println(f"{dyn}");
+    return 0;
+}

@@ -1,0 +1,13 @@
+// The standard library is Resid source you import by file name
+// (resolved relative to the importing file; copy or reference lib/).
+import "crypto.resid";
+
+Int main() {
+    println(sha256("abc"));
+    List(Int) key = [107, 101, 121];            // "key"
+    List(Int) msg = [104, 105];                 // "hi"
+    println(hex_encode(hmac_sha256_bytes(key, msg)));
+    println(f"{ct_equal([1, 2, 3], [1, 2, 3])} {ct_equal([1, 2, 3], [1, 2, 4])}");
+    println(f"{random_bytes(16).len()} random bytes");
+    return 0;
+}

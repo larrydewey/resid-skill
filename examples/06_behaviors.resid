@@ -1,0 +1,48 @@
+// Behaviors: a named instance `Name(Type) = impl;` binds compile-time
+// knowledge to a type. Ord-style instances are (T, T) -> Int comparators
+// used by sort(xs, using = ...); Reverse(...) flips any of them.
+// Show(T) = (T) -> Str is used by f-string holes.
+type Employee = { Str name; Int age; Int salary; };
+
+Int by_age(Employee a, Employee b) { return a.age - b.age; }
+Int by_salary(Employee a, Employee b) { return a.salary - b.salary; }
+Int by_name(Employee a, Employee b) { return str_cmp(a.name, b.name, 0); }
+
+Ord(Employee) = by_age;
+BySalary(Employee) = by_salary;
+ByName(Employee) = by_name;
+
+Str show_emp(Employee e) { return f"{e.name}/{e.age}/{e.salary}"; }
+Show(Employee) = show_emp;
+
+// Str has no `<`; compare code points (sort(List(Str)) is built in).
+Int str_cmp(Str a, Str b, Int i) {
+    Int la = str_len(a);
+    Int lb = str_len(b);
+    if (i >= la || i >= lb) { return la - lb; }
+    Int d = str_char_at(a, i) - str_char_at(b, i);
+    if (d != 0) { return d; }
+    return str_cmp(a, b, i + 1);
+}
+
+// Lists of records print as "…" inside f-strings, so join explicitly.
+Str names(List(Employee) xs, Int i, StrBuf b) {
+    if (i >= xs.len()) { return b.finish(); }
+    Str sep = if (i == 0) { "" } else { ", " };
+    return names(xs, i + 1, b.push(sep).push(f"{xs[i]}"));
+}
+
+Int main() {
+    List(Employee) staff = [
+        Employee {.name = "mara", .age = 41, .salary = 5200},
+        Employee {.name = "ben", .age = 29, .salary = 6100},
+        Employee {.name = "ines", .age = 35, .salary = 4800}
+    ];
+    println("by age:      " + names(sort(staff, using = Ord(Employee)), 0, StrBuf()));
+    println("oldest first " + names(sort(staff, using = Reverse(Ord(Employee))), 0, StrBuf()));
+    println("by salary:   " + names(sort(staff, using = BySalary(Employee)), 0, StrBuf()));
+    println("by name:     " + names(sort(staff, using = ByName(Employee)), 0, StrBuf()));
+    List(Int) nums = [5, 2, 9];
+    println(f"{sort(nums)} {sort(nums, using = Reverse(Ord(Int)))}");
+    return 0;
+}

@@ -1,0 +1,16 @@
+// Authority only narrows: a sandbox block caps everything declared inside
+// it (and what those functions call); @requires must fit the ceiling.
+sandbox (filesystem(readonly)) {
+    @requires(filesystem(readonly))
+    Bool has_dir(Str p) { return filesystem.is_dir(p); }
+}
+
+// A pure helper needs no grant at all.
+Str yes_no(Bool b) { return if (b) { "yes" } else { "no" }; }
+
+@requires(filesystem(readonly), args)
+Int main() {
+    println(f"/ is a dir: {yes_no(has_dir("/"))}");
+    println(f"args: {args.count()}");
+    return 0;
+}

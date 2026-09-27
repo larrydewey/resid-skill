@@ -1,0 +1,5 @@
+by age:      ben/29/6100, ines/35/4800, mara/41/5200
+oldest first mara/41/5200, ines/35/4800, ben/29/6100
+by salary:   ines/35/4800, mara/41/5200, ben/29/6100
+by name:     ben/29/6100, ines/35/4800, mara/41/5200
+List(Int(64))(2, 5, 9) List(Int(64))(9, 5, 2)

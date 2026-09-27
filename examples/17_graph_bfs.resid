@@ -1,0 +1,48 @@
+// Breadth-first search with persistent Map/Set values threaded through
+// tail calls; the compiler updates them in place when nothing else can
+// observe the old version.
+Map(Int, List(Int)) add_edge(Map(Int, List(Int)) g, Int a, Int b) {
+    List(Int) nil = [];
+    List(Int) na = g.get(a) else { nil };
+    Map(Int, List(Int)) g1 = g.insert(a, na.concat([b]));
+    List(Int) nb = g1.get(b) else { nil };
+    return g1.insert(b, nb.concat([a]));
+}
+
+Map(Int, List(Int)) build(List(Int) pairs, Int i, Map(Int, List(Int)) g) {
+    if (i + 1 >= pairs.len()) { return g; }
+    return build(pairs, i + 2, add_edge(g, pairs[i], pairs[i + 1]));
+}
+
+type St = { List(Int) queue; Set(Int) seen; Map(Int, Int) dist; };
+
+// Visit neighbours ns[k..] of node u.
+St visit(List(Int) ns, Int k, Int du, St s) {
+    if (k >= ns.len()) { return s; }
+    Int v = ns[k];
+    if (s.seen.contains(v)) { return visit(ns, k + 1, du, s); }
+    St s2 = St {.queue = s.queue.concat([v]), .seen = s.seen.insert(v), .dist = s.dist.insert(v, du + 1)};
+    return visit(ns, k + 1, du, s2);
+}
+
+Map(Int, Int) bfs(Map(Int, List(Int)) g, Int head, St s) {
+    if (head >= s.queue.len()) { return s.dist; }
+    Int u = s.queue[head];
+    List(Int) nil = [];
+    List(Int) ns = g.get(u) else { nil };
+    Int du = s.dist.get(u) else { 0 };
+    return bfs(g, head + 1, visit(ns, 0, du, s));
+}
+
+Int main() {
+    Map(Int, List(Int)) empty = {};
+    Map(Int, List(Int)) g = build([1, 2, 1, 3, 2, 4, 3, 4, 4, 5, 6, 7], 0, empty);
+    Set(Int) seen0 = {1};
+    Map(Int, Int) d0 = {1: 0};
+    Map(Int, Int) dist = bfs(g, 0, St {.queue = [1], .seen = seen0, .dist = d0});
+    for (Int node in sort(dist.keys())) {
+        println(f"node {node}: distance {dist.get(node) else { -1 }}");
+    }
+    println(f"reachable: {dist.len()} of {g.len()}");
+    return 0;
+}

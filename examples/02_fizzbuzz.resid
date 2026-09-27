@@ -1,0 +1,21 @@
+// Loops without mutation: `for` over a range for effects, and a self
+// tail call when a value must be carried from one step to the next.
+Str fizz(Int i) {
+    return if (i % 15 == 0) { "FizzBuzz" }
+        else { if (i % 3 == 0) { "Fizz" } else { if (i % 5 == 0) { "Buzz" } else { f"{i}" } } };
+}
+
+// Accumulator loop: count the multiples of 3 or 5 below n.
+Int count(Int i, Int n, Int acc) {
+    if (i >= n) { return acc; }
+    Int add = if (i % 3 == 0 || i % 5 == 0) { 1 } else { 0 };
+    return count(i + 1, n, acc + add);
+}
+
+Int main() {
+    for (Int i in 1..=15) {
+        println(fizz(i));
+    }
+    println(f"multiples below 1000: {count(1, 1000, 0)}");
+    return 0;
+}

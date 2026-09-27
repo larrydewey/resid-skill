@@ -1,0 +1,50 @@
+// A small tokenizer: walk a Str by code-point index, emit a List of a
+// sum type, render it with Show. The typical shape of parsers in Resid.
+type Tok = Num(Int) | Ident(Str) | Sym(Str);
+
+Str show_tok(Tok t) {
+    return match t {
+        Num(n) => f"Num({n})",
+        Ident(s) => f"Ident({s})",
+        Sym(s) => f"Sym({s})"
+    };
+}
+Show(Tok) = show_tok;
+
+Bool is_digit(Int c) { return c >= '0' && c <= '9'; }
+Bool is_alpha(Int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
+
+// End index of the run of chars satisfying the class starting at i.
+Int scan_digits(Str s, Int i) {
+    if (i < str_len(s) && is_digit(str_char_at(s, i))) { return scan_digits(s, i + 1); }
+    return i;
+}
+Int scan_ident(Str s, Int i) {
+    if (i < str_len(s)) {
+        Int c = str_char_at(s, i);
+        if (is_alpha(c) || is_digit(c)) { return scan_ident(s, i + 1); }
+    }
+    return i;
+}
+
+ListBuf(Tok) lex(Str s, Int i, ListBuf(Tok) out) {
+    if (i >= str_len(s)) { return out; }
+    Int c = str_char_at(s, i);
+    if (c == ' ') { return lex(s, i + 1, out); }
+    if (is_digit(c)) {
+        Int j = scan_digits(s, i);
+        return lex(s, j, out.push(Num(str_parse_int(str_slice(s, i, j)))));
+    }
+    if (is_alpha(c)) {
+        Int j = scan_ident(s, i);
+        return lex(s, j, out.push(Ident(str_slice(s, i, j))));
+    }
+    return lex(s, i + 1, out.push(Sym(str_from_code(c))));
+}
+
+Int main() {
+    List(Tok) toks = lex("let x1 = 42 + y*7;", 0, ListBuf()).finish();
+    println(f"{toks.len()} tokens");
+    for (Tok t in toks) { println(f"  {t}"); }
+    return 0;
+}

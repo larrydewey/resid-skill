@@ -1,0 +1,8 @@
+// Smallest program: `Int main()` returns the process exit code.
+// println takes exactly one Str; f-strings turn any value into a Str.
+Int main() {
+    Str who = "Resid";
+    Int year = 2026;
+    println(f"hello from {who}, {year}");
+    return 0;
+}

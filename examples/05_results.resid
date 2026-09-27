@@ -1,0 +1,46 @@
+// Errors are values: Result(T, E) / Option(T), `?` to propagate,
+// `x else { default }` to recover, match to inspect.
+Result(Int, Str) parse_num(Str s) {
+    if (str_is_int(s)) { return Ok(str_parse_int(s)); }
+    return Err(f"not a number: '{s}'");
+}
+
+Result(Int, Str) safe_div(Int a, Int b) {
+    if (b == 0) { return Err("division by zero"); }
+    return Ok(a / b);
+}
+
+// `?` returns the Err (or None) from the enclosing function at once.
+Result(Int, Str) calc(Str a, Str b) {
+    Int x = parse_num(a)?;
+    Int y = parse_num(b)?;
+    Int q = safe_div(x, y)?;
+    return Ok(q);
+}
+
+Str describe(Result(Int, Str) r) {
+    return match r {
+        Ok(v) => f"ok {v}",
+        Err(e) => f"error: {e}"
+    };
+}
+
+Option(Int) first_even(List(Int) xs, Int i) {
+    if (i >= xs.len()) { return None; }
+    if (xs[i] % 2 == 0) { return Some(xs[i]); }
+    return first_even(xs, i + 1);
+}
+
+Int main() {
+    println(describe(calc("84", "2")));
+    println(describe(calc("84", "zero")));
+    println(describe(calc("84", "0")));
+    Int v = calc("9", "x") else { -1 };
+    println(f"with default: {v}");
+    if (Some(e) = first_even([3, 5, 8, 10], 0)) {
+        println(f"first even: {e}");
+    }
+    Int none = first_even([1, 3], 0) else { 0 };
+    println(f"no even -> {none}");
+    return 0;
+}

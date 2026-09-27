@@ -1,0 +1,36 @@
+// Records are immutable: "updating" builds a new record, listing every
+// field. Destructure with `Type { a, b } = value;`. == works only on
+// scalars and Str, so write equality helpers for records.
+type Account = { Str owner; Int cents; Int ops; };
+
+Account deposit(Account a, Int amount) {
+    return Account {.owner = a.owner, .cents = a.cents + amount, .ops = a.ops + 1};
+}
+
+Result(Account, Str) withdraw(Account a, Int amount) {
+    if (amount > a.cents) { return Err(f"insufficient funds for {a.owner}"); }
+    return Ok(Account {.owner = a.owner, .cents = a.cents - amount, .ops = a.ops + 1});
+}
+
+Bool same(Account x, Account y) {
+    return x.owner == y.owner && x.cents == y.cents && x.ops == y.ops;
+}
+
+Str money(Int cents) {
+    Int r = cents % 100;
+    Str pad = if (r < 10) { "0" } else { "" };
+    return f"{cents / 100}." + pad + f"{r}";
+}
+
+Int main() {
+    Account a0 = Account {.owner = "zoe", .cents = 1000, .ops = 0};
+    Account a1 = deposit(a0, 250);
+    Account a2 = withdraw(a1, 1205) else { a1 };
+    Str r = match withdraw(a2, 99999) { Ok(acc) => "ok", Err(e) => e };
+    Account { owner, cents, ops } = a2;
+    println(f"{owner}: {money(cents)} after {ops} ops; old balance still {money(a0.cents)}");
+    println(r);
+    println(f"{same(a0, a0)} {same(a0, a1)}");
+    println(f"{a2}");
+    return 0;
+}

@@ -1,0 +1,10 @@
+9 tokens
+  Ident(let)
+  Ident(x1)
+  Sym(=)
+  Num(42)
+  Sym(+)
+  Ident(y)
+  Sym(*)
+  Num(7)
+  Sym(;)

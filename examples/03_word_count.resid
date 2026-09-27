@@ -1,0 +1,26 @@
+// Word frequencies: str_split, a Map threaded through a tail call,
+// sorting keys (map order is not insertion order), and StrBuf output.
+Map(Str, Int) tally(List(Str) words, Int i, Map(Str, Int) m) {
+    if (i >= words.len()) { return m; }
+    Str w = str_to_lower(words[i]);
+    if (w == "") { return tally(words, i + 1, m); }
+    Int c = m.get(w) else { 0 };
+    return tally(words, i + 1, m.insert(w, c + 1));
+}
+
+StrBuf report(List(Str) keys, Map(Str, Int) m, Int i, StrBuf out) {
+    if (i >= keys.len()) { return out; }
+    Int c = m.get(keys[i]) else { 0 };
+    return report(keys, m, i + 1, out.push(keys[i]).push("=").push(f"{c}").push_char('\n'));
+}
+
+Int main() {
+    Str text = "the cat and The dog and THE bird";
+    List(Str) words = str_split(text, " ");
+    Map(Str, Int) empty = {};
+    Map(Str, Int) m = tally(words, 0, empty);
+    List(Str) keys = sort(m.keys());
+    print(report(keys, m, 0, StrBuf()).finish());
+    println(f"distinct: {m.len()}");
+    return 0;
+}

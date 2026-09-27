@@ -1,0 +1,17 @@
+// Program arguments and environment are providers (need @requires).
+// args.get(0) is the program path; a missing arg or env var is "".
+@requires(args)
+Str arg_list(Int i, Int n, StrBuf b) {
+    if (i >= n) { return b.finish(); }
+    return arg_list(i + 1, n, b.push(f"[{args.get(i)}]"));
+}
+
+@requires(args, environment)
+Int main() {
+    Int n = args.count();
+    println(f"{n - 1} user args: {arg_list(1, n, StrBuf())}");
+    println(f"missing arg: '{args.get(99)}'");
+    Str v = environment.get("RESID_SKILL_SURELY_UNSET");
+    println(f"unset env var: '{v}'");
+    return 0;
+}

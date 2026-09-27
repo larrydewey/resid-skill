@@ -1,0 +1,23 @@
+// Structured concurrency: spawn (caps) { ... } runs a child region that
+// may use only the listed capabilities; its failure (an abort) comes back
+// as Err(RegionError) instead of killing the process.
+Int fib(Int n) { return if (n < 2) { n } else { fib(n - 1) + fib(n - 2) }; }
+
+Int risky(Int i) {
+    List(Int) xs = [1, 2, 3];
+    return xs[i];              // aborts when i >= 3
+}
+
+Int main() {
+    Int n = rt 25;             // rt: keep it a runtime value
+    Result(Int, RegionError) a = spawn () {
+        return fib(n);
+    };
+    Result(Int, RegionError) b = spawn () {
+        return risky(n);
+    };
+    Int av = match a { Ok(v) => v, Err(e) => -1 };
+    Str bv = match b { Ok(v) => f"{v}", Err(e) => "child failed" };
+    println(f"fib = {av}; risky: {bv}");
+    return 0;
+}

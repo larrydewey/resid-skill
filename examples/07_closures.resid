@@ -1,0 +1,41 @@
+// Higher-order code: closure types are written `Ret closure(Args)`.
+// A lambda needs that type from context (a typed binding or parameter);
+// named functions are not values, so wrap them: lambda(x) { f(x) }.
+List(Int) map_list(List(Int) xs, Int closure(Int) f, Int i, ListBuf(Int) acc) {
+    if (i >= xs.len()) { return acc.finish(); }
+    return map_list(xs, f, i + 1, acc.push(f(xs[i])));
+}
+
+List(Int) filter_list(List(Int) xs, Bool closure(Int) keep, Int i, ListBuf(Int) acc) {
+    if (i >= xs.len()) { return acc.finish(); }
+    if (keep(xs[i])) { return filter_list(xs, keep, i + 1, acc.push(xs[i])); }
+    return filter_list(xs, keep, i + 1, acc);
+}
+
+Int fold(List(Int) xs, Int closure(Int, Int) f, Int i, Int acc) {
+    if (i >= xs.len()) { return acc; }
+    return fold(xs, f, i + 1, f(acc, xs[i]));
+}
+
+// To return a closure, bind it to a typed name first.
+Int closure(Int) adder(Int n) {
+    Int closure(Int) f = lambda(x) { x + n };
+    return f;
+}
+
+Int square(Int x) { return x * x; }
+
+Int main() {
+    List(Int) xs = [1, 2, 3, 4, 5, 6];
+    List(Int) sq = map_list(xs, lambda(x) { square(x) }, 0, ListBuf());
+    List(Int) ev = filter_list(sq, lambda(x) { x % 2 == 0 }, 0, ListBuf());
+    Int sum = fold(ev, lambda(a, b) { a + b }, 0, 0);
+    println(f"{sq} {ev} {sum}");
+    Int closure(Int) add10 = adder(10);
+    println(f"{add10(5)}");
+    // A lambda body is statements then a final expression; it captures.
+    Int base = 100;
+    Int closure(Int) g = lambda(x) { Int y = x * 2; y + base };
+    println(f"{g(7)}");
+    return 0;
+}
