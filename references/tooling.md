@@ -72,8 +72,7 @@ error[E0001]: type error: binding s: expected Str, got Int
 ```
 
 Some failures come from later stages without an E-code: `codegen error: ...`
-(lowering) or a clang message about the generated `.ll` (`use of undefined
-value '@__cmp_by_pay'`). Those are compiler
+(lowering) or a clang message about the generated `.ll`. Those are compiler
 limitations triggered by a construct; see
 [idioms-and-antipatterns.md](idioms-and-antipatterns.md) (known issues) for
 the usual causes, then rewrite the construct. [error-codes.md](error-codes.md)

@@ -111,8 +111,10 @@ Int main() {
 - Defaults must be compile-time constants. Named arguments: `f(x, name = v)`.
 - `x.f(args)` is sugar for `f(x, args)` (works for any function, and for
   builtin list/map/set/builder methods).
-- No generic functions: `T id(T x)` is rejected. Generic *types* exist
-  (`Option(T)`, `type Box(T) = ...`), but each function has concrete types.
+- Generic functions and records: one uppercase letter is a type parameter
+  (`T id(T x)`, `type Box(T) = { T v; };`, `Int(N)` for widths); a body that
+  sorts/shows/compares a `T` declares `@needs(Ord(T))`. See
+  [behaviors.md](behaviors.md).
 - No overloading (one function per name).
 - Functions are not values; lambdas are: [functions-and-closures.md](functions-and-closures.md).
 

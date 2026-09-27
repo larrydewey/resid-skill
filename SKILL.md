@@ -107,8 +107,9 @@ Int main() {
 - [ ] Literal-only arithmetic that needs >64 bits has a widened operand.
 - [ ] Loops accumulate via tail calls with builders; no prepending in loops.
 - [ ] Map output that must be ordered goes through `sort(m.keys())`.
-- [ ] One `Ord(T)` per type (then `sort(xs)` works); other orders use a
-      comparator-closure sort, not a custom-named behavior (known issue).
+- [ ] One `Ord(T)` per type (then `sort(xs)` and `<` work); other orders via
+      `sort(xs, using = cmp)` or `using = Reverse(Ord(T))`.
+- [ ] Generic bodies list what they sort/show/compare in `@needs(...)`.
 
 ## Workflow
 

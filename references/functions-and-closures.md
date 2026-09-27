@@ -22,9 +22,10 @@ Int main() {
 - Argument types must match exactly after literal adoption (value-preserving
   integer widening of a variable is accepted; computed expressions of the
   wrong width are not). Convert explicitly when in doubt: `f(i32(x))`.
-- One function per name: no overloading, no generic type parameters. For the
-  same logic over several types, write one function per type (or wrap the
-  varying part in a closure parameter).
+- One function per name: no overloading. For the same logic over several
+  types, write one generic function (`T last(List(T) xs)`, with `@needs` for
+  what it sorts, shows or compares; see [behaviors.md](behaviors.md)), or
+  wrap the varying part in a closure parameter.
 - Method-call sugar: `x.f(a)` means `f(x, a)` for any function whose first
   parameter matches.
 - `pub` exports a function from its module; see [stdlib.md](stdlib.md) for

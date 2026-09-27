@@ -41,7 +41,8 @@ All indices are code points; `str_slice` end is exclusive.
 | `str_is_float(s)` / `str_parse_float(s)` | `Bool` / `Float` |
 | `str_sha256(s)` | `Str` hex digest |
 
-Also `s == t`, `s != t`, `s + t`, and `f"..."`. There is no `<` on strings,
+Also `s == t`, `s != t`, `s < t` (code-point order), `s + t`, and `f"..."`.
+There is
 no `s[i]`, no `format()`/`printf`; build text with f-strings and `StrBuf`.
 
 ```resid

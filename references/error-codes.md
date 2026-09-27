@@ -75,7 +75,7 @@ Driver-level errors without a code:
 | ``else` block yields Void, need payload Int`` | `x else { todo() }` or `return` in `else` | give a value; use `match` for early exit |
 | `f-string hole is not one expression` | `{1e10}` or other unparsable hole | fix the expression (no scientific literals) |
 | `expected a function declaration` | top-level `Int X = 5;`, or a bad annotation | constants are zero-arg functions |
-| `call ident expects (T), got (Int)` | generic function `T f(T x)` | write concrete functions |
+| `unknown type \`Elem\`; a type parameter is a single uppercase letter` | a multi-letter name used as a type parameter, or a typo | use `T`, `K`, `V`; fix the name |
 | `sort(xs) of T needs a behavior: sort(xs, using = Ord(T))` | sorting records/sums with no `Ord(T)` instance | declare `Ord(T) = cmp;` |
 | `behavior Show(T): impl must have signature (T) -> Str` | wrong impl signature | fix the signature |
 | `expected ;, found orelse` / `found f` after `try` | non-existent operators | use `else { }`, `?`, `match` |
@@ -89,8 +89,6 @@ later stage cannot handle; rewrite the construct.
 
 | Symptom | Usual cause | Rewrite |
 |---|---|---|
-| clang: `use of undefined value '@__cmp_NAME'` | a behavior named other than `Ord` used in `sort(..., using = Name(T))` (known issue in 79f9062) | use `Ord(T)` / `Reverse(Ord(T))`, or a comparator-closure sort (behaviors.md) |
-| clang: `invalid redefinition of function '__cmp_f'` | the same behavior instance declared twice | declare it once |
 
 ## Runtime aborts (exit 134)
 

@@ -14,10 +14,9 @@
 | `obj.field = v` | build a new record with every field |
 | `switch (n) { case 1: ... }` | `if` chains (match only takes variants) |
 | `s[i]` on a string | `str_char_at(s, i)` (a code point `Int`) |
-| `a < b` on strings | a code-point comparison function, or `sort` of a list |
-| `a == b` on records/lists | an `eq` function comparing fields/elements |
-| generics `fn f<T>(x: T)` | one function per concrete type, or a closure parameter |
-| interface / trait | a behavior instance (orderings, Show), a closure record, or a sum type |
+| `a == b` on records | declare `Eq(T) = eq_fn;` (then `==` calls it), or compare fields |
+| generics `fn f<T>(x: T)` | `T f(T x)`; bounds `T: Ord` become `@needs(Ord(T))` |
+| interface / trait | `behavior Name(T) { ... }` + an instance per type (no methods), a closure record, or a sum type |
 | `map(f, xs)` / `filter` | write `map_ints`/`filter_ints` once (see functions-and-closures.md) |
 | global mutable state | pass state explicitly; return new state |
 | `printf("%5.2f")` | f-strings plus your own padding/rounding helpers; `Dec(N)` for fixed decimals |
@@ -120,25 +119,24 @@ order.
   computes in `Int(64)`. Widen one operand.
 - **Constraint types as validation of user input**: a failing residual value
   aborts the process; validate with `if` and return a `Result` instead.
-- **Defining `Show` for builtin types** (`Show(Int)`): partially applied,
-  confusing output. Wrap in a record instead.
+- **Defining `Show` for builtin types** (`Show(Int)`): rejected (numbers,
+  Bool and Str have a fixed display). Wrap in a record instead.
 - **Calling compiler internals** seen in `compiler/` or `runtime/rt/`
   (`resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, `*_persist*`): E0220.
 - **Scientific float literals, `_` digit separators, `{{` in f-strings,
   `try`, `orelse`, `unwrap()`, `x.first()`, `s[i]`**: none exist.
 
-## Known issues in the current compiler (commit 79f9062; work around them)
+## Known issues in the current compiler (commit 21dd7ab; work around them)
 
 | Issue | Workaround |
 |---|---|
-| A behavior named other than `Ord` (`ByPay(T) = f; sort(xs, using = ByPay(T))`, also under `Reverse`) fails in clang: `use of undefined value '@__cmp_f'` | one `Ord(T)` per type plus `Reverse`; other orders via a comparator-closure merge sort (behaviors.md) |
-| Declaring the same behavior instance twice fails in clang | declare it once |
-| `Show(Int)` (instance on a builtin) applies inside other `Show` impls but not at top level | do not define `Show` for builtin types |
+| Unknown string escapes (`"\x1f"`) silently drop the backslash | use only `\n \t \r \" \\`; build control characters with `str_from_code(n)` |
 | `git` provider from the spec: `@requires(git)` accepted, `git.*` calls do not compile | `process.run("git ...")` (exit status only) |
 
-Language limits (by design or not yet implemented; not bugs): no generic
-functions, flat match patterns only (no nested/literal/guard patterns), one
-payload per variant, no `s[i]`/`<` on `Str`, no global constants, no
+Language limits (by design or not yet implemented; not bugs): no methods or
+run-time dispatch (behaviors resolve at compile time), no generic lambdas,
+flat match patterns only (no nested/literal/guard patterns), one
+payload per variant, no `s[i]` on `Str`, no global constants, no
 `try`/`orelse`/`unwrap`, no scientific float literals or `_` separators, no
 `{{` escape, `else { }` blocks cannot `return`, `Void` functions cannot
 `return;`, lambdas take untyped parameters, named functions are not values,

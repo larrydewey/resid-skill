@@ -165,7 +165,7 @@ Int main() {
 ## Strings
 
 `Str` is immutable UTF-8. Indices are **code points**. There is no `s[i]`
-indexing and no `<`/`>` on strings; `==`/`!=` work. `+` concatenates.
+indexing; `==`, `!=` and `<` `<=` `>` `>=` (through `Ord(Str)`) work. `+` concatenates.
 Escapes: `\n \t \" \\`. Raw strings `r"C:\x"`. f-strings: `f"{expr}"`; a
 hole holds one expression of any type. No `{{` escape: concatenate a
 `"{"` literal instead.
