@@ -34,14 +34,14 @@ There is no `run` subcommand (older docs mention one): build, then execute.
 Other subcommands: `residc keygen [dir]` (Ed25519 key pair, secret written
 0600), `residc verify BINARY [--pub HEX]` (checks the provenance
 signature, code hash and sidecars), `residc test FILE [--filter RE]
-[--format pretty|tap|json]` (see [testing.md](testing.md); currently fails
-to link).
+[--format pretty|tap|json]` (see [testing.md](testing.md)), `residc lsp`
+(language server over stdio).
 
 Environment:
 
 | Variable | Use |
 |---|---|
-| `RESID_HOME` | directory holding `rt.ll`; needed when running `stage2.bin` outside the checkout root (`clang: error: no such file or directory: 'build/boot/rt.ll'` means it is unset) |
+| `RESID_HOME` | directory holding `rt.ll` (and, two levels up, the stdlib `lib/` used as the import fallback); needed when running `stage2.bin` outside the checkout root (`clang: error: no such file or directory: 'build/boot/rt.ll'` means it is unset) |
 | `RESID_SIGNING_KEY` | secret key file for release builds (else `keys/resid-ed25519.key` relative to the cwd) |
 | `RESID_MEM_LIMIT` | memory budget in MB for a program (compiler default 4096) |
 | `RESID_TEST_FORMAT`, `RESID_TEST_FILTER` | test runner output and filter |
@@ -72,8 +72,8 @@ error[E0001]: type error: binding s: expected Str, got Int
 ```
 
 Some failures come from later stages without an E-code: `codegen error: ...`
-(lowering) or a clang message about the generated `.ll` (`error: '%t1'
-defined with type 'ptr' but expected 'i64'`). Those are compiler
+(lowering) or a clang message about the generated `.ll` (`use of undefined
+value '@__cmp_by_pay'`). Those are compiler
 limitations triggered by a construct; see
 [idioms-and-antipatterns.md](idioms-and-antipatterns.md) (known issues) for
 the usual causes, then rewrite the construct. [error-codes.md](error-codes.md)
@@ -175,6 +175,5 @@ keyring = "keys/"
 
 ### Editor support
 
-The checkout's `editors/vscode` holds a VS Code extension. A self-hosted
-language server (`residc lsp`) is in development and not in the committed
-compiler yet; check `residc` with no arguments for the current usage line.
+`residc lsp` is a language server on stdio (diagnostics and more); the
+checkout's `editors/vscode` extension launches it.

@@ -12,7 +12,7 @@ loops that carry state are tail calls, errors are `Option`/`Result` values,
 and **no function touches the outside world without a declared capability**.
 
 This skill was verified against the self-hosted compiler (spec v3.6,
-September 2026). Every code block in it compiles; `scripts/check-examples.sh`
+Resid commit 79f9062). Every code block in it compiles; `scripts/check-examples.sh`
 re-checks them.
 
 ## Mental model
@@ -59,12 +59,10 @@ Int main() {
   not in nested blocks). Sibling blocks may reuse names. Discard with `_ = e;`.
 - **No globals**: constants are zero-arg functions. No generic functions, no
   overloading, no methods on types (but `x.f(a)` = `f(x, a)`).
-- `if` is an expression (`Int y = if (c) { 1 } else { 2 };`); always write
-  the `else`. Arms/branches must have identical types.
+- `if` is an expression (`Int y = if (c) { 1 } else { 2 };`) and then needs
+  its `else`. Branches must have identical types.
 - `match` only on sum types (`Option`, `Result`, yours); patterns are flat
-  (`V(x)`, `V`, `_`), must be exhaustive. **Keep match arms branch-free**: no
-  `if`/`?:`/`&&`/`||`/nested `match`/`else {}` inside an arm (broken IR today);
-  call a helper instead.
+  (`V(x)`, `V`, `_`), must be exhaustive. Use `if` chains for numbers/strings.
 - Sum variants carry at most one payload: `Rect(Dims)`, not `Rect(Float, Float)`.
 - `for` needs the element type: `for (Int i in 0..n)`, `for (Str s in xs)`.
   Sets/maps: iterate `s.to_list()` / `m.keys()`.
@@ -74,15 +72,16 @@ Int main() {
   when wrap/clamp is intended.
 - Strings: `+`, `==`, f-strings `f"{any_value}"`; no `s[i]` (use
   `str_char_at`), no `<` on `Str`, no `{{` escape, no scientific float literals.
-- `==` works on scalars and `Str` only; compare records/lists field by field.
-- Lambdas need a typed context: `Int closure(Int) f = lambda(x) { x + 1 };`.
-  Named functions are not values: wrap them (`lambda(x) { g(x) }`).
+- `==` works on numbers, Bool and `Str` only; compare records/lists by parts.
+- Lambdas take their type from context (typed binding, parameter, return
+  type, field): `Int closure(Int) f = lambda(x) { x + 1 };`. Named functions
+  are not values: wrap them (`lambda(x) { g(x) }`).
 - Build strings/lists in loops with `StrBuf` / `ListBuf(T)` threaded through
   tail calls; each builder value is used exactly once.
 - `println` takes one `Str`. `print`, `eprintln` likewise.
-- Imports are file paths relative to the importing file; only `pub`
-  functions are visible. A wrong path is silently ignored (you then see
-  `undefined variable`/`unknown function`).
+- Imports are file paths relative to the importing file, falling back to the
+  stdlib (`import "crypto.resid";` works anywhere); missing module = E0221.
+  Only `pub` functions are visible.
 - Never call `resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, persist copies:
   compiler internals, rejected with E0220.
 
@@ -92,16 +91,13 @@ Int main() {
       *or calling one that does*, has `@requires(...)`; `main` covers all.
 - [ ] Writes are not under a `readonly` grant.
 - [ ] No name bound twice on a nesting path (parameters included).
-- [ ] Every non-Void function returns on every path (missing returns are not
-      diagnosed; they return garbage).
-- [ ] Match arms contain no control flow; every sum type has an arm or `_`.
-- [ ] No `==` on records/lists/options; no `?` in `main`.
+- [ ] Every sum type in a `match` has an arm or `_`; no literal patterns.
+- [ ] `?` only inside functions returning Option/Result.
 - [ ] Literal-only arithmetic that needs >64 bits has a widened operand.
 - [ ] Loops accumulate via tail calls with builders; no prepending in loops.
-- [ ] Printed sum types have `Show`; printed maps use `sort(m.keys())`;
-      `Result` is matched before printing.
-- [ ] Behavior instance types are single identifiers; each instance has its
-      own impl function; `sort` of user types passes `using = ...`.
+- [ ] Map output that must be ordered goes through `sort(m.keys())`.
+- [ ] One `Ord(T)` per type (then `sort(xs)` works); other orders use a
+      comparator-closure sort, not a custom-named behavior (known issue).
 
 ## Workflow
 
@@ -115,8 +111,9 @@ Int main() {
    needs a signing key (`residc keygen`, `RESID_SIGNING_KEY`).
 4. **Read errors**: `error[E0001]: type error: <message>` with a caret; the
    message says what to change ([references/error-codes.md](references/error-codes.md)).
-   A clang/LLVM error about the generated `.ll` means a construct the
-   compiler mishandles; see the known-issues table in
+   `residc test prog.resid` runs its `test "..." { }` blocks. A clang/LLVM
+   error about the generated `.ll` means a construct the compiler mishandles;
+   see the known-issues table in
    [references/idioms-and-antipatterns.md](references/idioms-and-antipatterns.md).
 5. **Runtime abort** (exit 134, `resid: abort: ...` on stderr): overflow,
    index, conversion, assert, `todo`. Use `rt` to reproduce runtime paths;

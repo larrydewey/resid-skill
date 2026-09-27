@@ -50,8 +50,8 @@ Int main() {
 - `?` works in functions returning `Option` or `Result`. Match the kinds:
   `Option` inside an `Option` function, `Result` inside a `Result` function
   with the same error type.
-- Do not use `?` in `Int main()` (it fails in code generation). Handle the
-  error in main with `else` or `match`.
+- `?` in a function that returns neither (such as `Int main()`) is a compile
+  error; handle the value there with `else` or `match`.
 
 ## `else` defaults
 
@@ -134,8 +134,8 @@ Int main() {
 }
 ```
 
-Note: `f"{result}"` on a `Result` prints `Some(...)`/`None` today. Always
-`match` a `Result` before printing it.
+`f"{r}"` prints a `Result` as `Ok(42)` / `Err("msg")`; match it when you
+want your own wording.
 
 ## Aborts
 
@@ -148,6 +148,7 @@ Note: `f"{result}"` on a `Result` prints `Some(...)`/`None` today. Always
 | `assert(c, msg)` / `rt_assert(c, msg)` false | `assertion failed: msg` |
 | `todo(msg)` / `unimplemented(msg)` reached | `not yet implemented: msg` |
 | refutable binding `Some(v) = none_value;` | `irrefutable pattern did not match` |
+| residual value bound to a constraint type that fails it | `constraint of Positive (value > 0) does not hold` |
 | Dec division by zero / non-integral Dec to Int | `dec: division by zero` / `dec: non-integer to Int` |
 | memory budget exceeded | `memory budget exceeded (N MB); set RESID_MEM_LIMIT (MB) to raise it` |
 
@@ -192,5 +193,6 @@ before an operation that needs headroom: `(Int(128))a * b`.
 
 Use `str_is_int`/`str_is_float` before `str_parse_int`/`str_parse_float`
 (`str_parse_int("abc")` returns 0, not an error), and check lengths
-before indexing. Constraint types (`Int[value > 0]`) only check known values
-at compile time; validate residual input with `if` or `rt_assert`.
+before indexing. Constraint types (`Int[value > 0]`) check known values at
+compile time and residual values at run time (an abort); for recoverable
+validation use `if` and return a `Result`.

@@ -1,16 +1,11 @@
-// Behaviors: a named instance `Name(Type) = impl;` binds compile-time
-// knowledge to a type. Ord-style instances are (T, T) -> Int comparators
-// used by sort(xs, using = ...); Reverse(...) flips any of them.
-// Show(T) = (T) -> Str is used by f-string holes.
+// Behaviors: `Name(Type) = impl;` binds compile-time knowledge to a type.
+// Ord(T) is a (T, T) -> Int comparator used by sort; Reverse(...) flips it.
+// Show(T) = (T) -> Str is used by f-string holes (also inside lists).
+// Other orders: a comparator closure and a small merge sort.
 type Employee = { Str name; Int age; Int salary; };
 
 Int by_age(Employee a, Employee b) { return a.age - b.age; }
-Int by_salary(Employee a, Employee b) { return a.salary - b.salary; }
-Int by_name(Employee a, Employee b) { return str_cmp(a.name, b.name, 0); }
-
 Ord(Employee) = by_age;
-BySalary(Employee) = by_salary;
-ByName(Employee) = by_name;
 
 Str show_emp(Employee e) { return f"{e.name}/{e.age}/{e.salary}"; }
 Show(Employee) = show_emp;
@@ -25,11 +20,19 @@ Int str_cmp(Str a, Str b, Int i) {
     return str_cmp(a, b, i + 1);
 }
 
-// Lists of records print as "…" inside f-strings, so join explicitly.
-Str names(List(Employee) xs, Int i, StrBuf b) {
-    if (i >= xs.len()) { return b.finish(); }
-    Str sep = if (i == 0) { "" } else { ", " };
-    return names(xs, i + 1, b.push(sep).push(f"{xs[i]}"));
+// Stable merge sort by any comparator.
+List(Employee) merge(List(Employee) a, List(Employee) b, Int closure(Employee, Employee) cmp, Int i, Int j, ListBuf(Employee) out) {
+    if (i >= a.len() && j >= b.len()) { return out.finish(); }
+    if (j >= b.len()) { return merge(a, b, cmp, i + 1, j, out.push(a[i])); }
+    if (i >= a.len()) { return merge(a, b, cmp, i, j + 1, out.push(b[j])); }
+    if (cmp(b[j], a[i]) < 0) { return merge(a, b, cmp, i, j + 1, out.push(b[j])); }
+    return merge(a, b, cmp, i + 1, j, out.push(a[i]));
+}
+
+List(Employee) sort_by(List(Employee) xs, Int closure(Employee, Employee) cmp) {
+    if (xs.len() <= 1) { return xs; }
+    Int mid = xs.len() / 2;
+    return merge(sort_by(xs[0..mid], cmp), sort_by(xs[mid..], cmp), cmp, 0, 0, ListBuf());
 }
 
 Int main() {
@@ -38,10 +41,10 @@ Int main() {
         Employee {.name = "ben", .age = 29, .salary = 6100},
         Employee {.name = "ines", .age = 35, .salary = 4800}
     ];
-    println("by age:      " + names(sort(staff, using = Ord(Employee)), 0, StrBuf()));
-    println("oldest first " + names(sort(staff, using = Reverse(Ord(Employee))), 0, StrBuf()));
-    println("by salary:   " + names(sort(staff, using = BySalary(Employee)), 0, StrBuf()));
-    println("by name:     " + names(sort(staff, using = ByName(Employee)), 0, StrBuf()));
+    println(f"by age:       {sort(staff)}");                       // unique Ord inserted
+    println(f"oldest first: {sort(staff, using = Reverse(Ord(Employee)))}");
+    println(f"by salary:    {sort_by(staff, lambda(a, b) { a.salary - b.salary })}");
+    println(f"by name:      {sort_by(staff, lambda(a, b) { str_cmp(a.name, b.name, 0) })}");
     List(Int) nums = [5, 2, 9];
     println(f"{sort(nums)} {sort(nums, using = Reverse(Ord(Int)))}");
     return 0;

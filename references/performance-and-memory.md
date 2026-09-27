@@ -174,7 +174,7 @@ Int main() {
     Map(Str, List(Int)) e = {};
     Map(Str, List(Int)) m = add(add(add(e, "a", 1), "b", 2), "a", 3);
     List(Int) nil = [];
-    println(f"{m.get("a") else { nil }}");      //> List(Int)(1, 3)
+    println(f"{m.get("a") else { nil }}");      //> [1, 3]
     return 0;
 }
 ```

@@ -65,33 +65,35 @@ Int main() {
 }
 ```
 
-Rules that bite (all observed with the current compiler):
+A lambda gets its type from where it is used: a typed binding, a parameter,
+a return type, or a record field. Lambdas capture variables, including other
+closures and records, and may contain list literals.
+
+Rules that bite:
 
 | Situation | What to do |
 |---|---|
-| A lambda with no expected closure type (`return lambda...`, a record literal field, an untyped position) | bind it to a typed name first, then use the name |
+| A lambda with no expected closure type (e.g. directly in an f-string hole) | `closure literal needs a closure(..) expected type`: bind it to a typed name |
 | A named function passed as a value (`apply(inc, 1)`) | `undefined variable`: wrap it, `lambda(x) { inc(x) }` |
 | Typed lambda parameters `lambda(Int x)` | not allowed; types come from the closure type |
-| A lambda that captures another closure *variable* and calls it | codegen error `undefined variable`; inline the inner lambda or call a named function |
-| `Void closure(...)` whose body ends in `println(...)` | `println` returns `Bool`: call a `Void` helper, or use a `Bool closure` |
-| Two list literals inside lambdas of one function | may fail with a duplicate `@.lty` global in clang; move literals into helper functions |
+| A `Void closure` body ending in a `Bool` call like `println(..)` | fine: the value is discarded |
 
 ```resid
-// Returning a closure: bind it to a typed name first.
-Int closure(Int) multiplier(Int m) {
-    Int closure(Int) f = lambda(x) { x * m };
-    return f;
-}
+Int closure(Int) multiplier(Int m) { return lambda(x) { x * m }; }   // return type supplies it
 
 type Op = { Str name; Int closure(Int, Int) run; };
 
+Int twice(Int closure(Int) f, Int x) { return f(f(x)); }
+
 Int main() {
     Int closure(Int) triple = multiplier(3);
-    Int closure(Int, Int) plus = lambda(a, b) { a + b };
-    Op add = Op {.name = "add", .run = plus};         // field set from a typed name
+    Op add = Op {.name = "add", .run = lambda(a, b) { a + b }};     // field type supplies it
     List(Int closure(Int)) pipeline = [triple, multiplier(10)];
     Int closure(Int) second = pipeline[1];
-    println(f"{triple(5)} {add.run(2, 3)} {second(4)}");   //> 15 5 40
+    Int closure(Int) nine_x = lambda(x) { twice(triple, x) };       // captures a closure
+    Void closure(Str) say = lambda(s) { println("> " + s) };
+    say("hi");                                                      //> > hi
+    println(f"{triple(5)} {add.run(2, 3)} {second(4)} {nine_x(2)}"); //> 15 5 40 18
     return 0;
 }
 ```
@@ -105,7 +107,10 @@ Int main() { return apply(inc, 1); }
 
 ```resid
 //! compile-error: closure literal needs a closure(..) expected type
-Int closure(Int) adder(Int n) { return lambda(x) { x + n }; }
+Int main() {
+    println(f"{lambda(x) { x }}");
+    return 0;
+}
 ```
 
 ## Higher-order helpers you write yourself

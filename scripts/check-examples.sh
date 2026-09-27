@@ -26,8 +26,9 @@
 #   - `//! args: A B`        program arguments
 #   - `//! skip`             not compiled (use sparingly; say why)
 #
-# Each program is compiled in a fresh dir holding a copy of RESID_REPO/lib,
-# so `import "crypto.resid";` resolves. It runs with that dir as cwd.
+# Each program is compiled in a fresh dir and run with that dir as cwd.
+# `import "crypto.resid";` resolves through the compiler's stdlib fallback
+# (RESID_HOME/../../lib).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,7 +59,6 @@ run_one() {
     local name="$1" src="$2" want="$3" wexit="$4" args="$5" cerr="$6" run="$7" envs="${8:-}" input="${9:-/dev/null}"
     local dir="$WORK/$name"
     mkdir -p "$dir"
-    cp "$REPO"/lib/*.resid "$dir"/ 2>/dev/null
     cp "$src" "$dir/prog.resid"
     (cd "$REPO" && timeout 300 "$COMPILER" "$dir/prog.resid" -o "$dir/bin" --profile debug) > "$dir/compile.log" 2>&1
     local crc=$?

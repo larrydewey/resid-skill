@@ -100,7 +100,7 @@ Float floor_f(Float x) {
 
 Int main() {
     println(f"{isqrt(1000000)} {isqrt(99)} {ipow(3, 4)}");   //> 1000 9 81
-    println(f"{fsqrt(2.0)} {fsqrt(16.0)}");                 //> 1.4142135623730949 4
+    println(f"{fsqrt(2.0)} {fsqrt(16.0)}");                 //> 1.414213562373095 4
     println(f"{floor_f(-2.5)} {floor_f(2.5)}");              //> -3 2
     return 0;
 }
@@ -127,9 +127,10 @@ with `file`, `line`, `col`). See [compile-time-reduction.md](compile-time-reduct
 
 ## Library modules (`lib/` in the Resid repo)
 
-Import by file path relative to the importing file:
-`import "../resid/lib/crypto.resid";`, or copy the files next to yours and
-`import "crypto.resid";`. Only `pub` functions are visible.
+`import "crypto.resid";` works from any directory: a name not found next to
+the importing file falls back to the stdlib directory (`RESID_HOME/../../lib`,
+then `./lib`). A file of the same name next to yours wins. Only `pub`
+functions are visible.
 
 | Module | Provides (main entry points) |
 |---|---|
@@ -150,9 +151,8 @@ Import by file path relative to the importing file:
 Byte strings in the library are `List(Int)`, one byte per element. Some
 older modules (`der`, `rsa`) use a "seeded" convention where index 0 is a
 dummy element; read a module's header comment before calling it.
-`base64_encode` currently mis-pads some inputs (`[104, 105]` gives
-`aGk==`); verify library output against a known vector before relying on
-it.
+As with any library, check output against a known test vector before
+relying on a routine you have not used before.
 
 ```resid
 import "crypto.resid";

@@ -25,7 +25,8 @@ Int main() {
 ```
 
 - Syntax: `@requires(family, family(mode), ...)` immediately before a function
-  (or a `test` block). Modes: `readonly`, `readwrite` (default).
+  (or a `test` block). Modes: `readonly`, `readwrite` (default). An unknown
+  family or mode is E0213. Provider arguments are type-checked.
 - A function "uses" what its provider calls and effectful builtins use, plus
   everything used by each function it calls, each lambda it writes, each
   method-sugar call, and each `sort` behavior it selects.
@@ -69,7 +70,7 @@ Int main() {
 | | `filesystem.write_all(path, s)` / `write_bytes(path, List(Int))` | `Bool` | write |
 | | `filesystem.append_bytes(path, List(Int))` | `Bool` | write |
 | | `filesystem.write_hex(path, hex)` / `append_hex(path, hex)` | `Bool` | write |
-| | `filesystem.write_secret(path, s)` (mode 0600) | `Bool` | write |
+| | `filesystem.write_secret(path, List(Int))` (mode 0600, no symlink follow) | `Bool` | write |
 | | `filesystem.create_dir(path)` (creates parents) | `Bool` | write |
 | `environment` | `environment.get(name)` | `Str` ("" if unset) | read |
 | `args` | `args.count()` / `args.get(i)` | `Int` / `Str` ("" if absent); `get(0)` is the program path | read |
@@ -80,8 +81,8 @@ Not capabilities (always allowed): `print`, `println`, `eprintln`,
 `print_bytes`, `resid_read_line()` (stdin; keeps the trailing `\n`, `""` at
 EOF), `resid_crypto_random_byte()` (OS randomness), allocation, aborts.
 
-The spec also lists a `git` provider; the current compiler does not accept
-`git.*` calls.
+The spec also lists a `git` provider and `@requires(git)` is accepted, but
+`git.*` calls do not compile yet (`undefined variable git`).
 
 ```resid
 @requires(filesystem)

@@ -108,10 +108,10 @@ Int main() {
 
 `Float` = `Float(64)`; also `Float(16)`, `Float(32)`, `Float(128)`. Int op
 Float gives the Float type; Float op Float gives the wider. f-strings print
-up to 17 significant digits with trailing zeros dropped (`%.17g` style):
-`2.0` prints `2`, `3.5` prints `3.5`, but `0.1` prints
-`0.10000000000000001` and `3.14` prints `3.1400000000000001`. For fixed
-decimals in output, format yourself or compute in `Dec(N)`. No scientific
+the shortest text that round-trips at the value's own width: `2.0` prints
+`2`, `3.14` prints `3.14`, `f32(0.1)` prints `0.1`, `0.1 + 0.2` prints
+`0.30000000000000004`. For fixed decimals in output, format yourself or
+compute in `Dec(N)`. No scientific
 literals (`1e10` is rejected); no `sqrt`/`sin`/`pow` builtins (write them;
 see [stdlib.md](stdlib.md)). NaN != NaN.
 
@@ -121,8 +121,8 @@ Int main() {
     Float b = (Float)7 / 2.0;
     Int t = (Int)3.99;              // truncates
     Float(32) s = f32(0.1);
-    println(f"{0.1} {3.14}");                    //> 0.10000000000000001 3.1400000000000001
-    println(f"{a} {b} {t} {2.0} {0.1 + 0.2} {s}");  //> 3.5 3.5 3 2 0.30000000000000004 0.10000000149011612
+    println(f"{0.1} {3.14}");                    //> 0.1 3.14
+    println(f"{a} {b} {t} {2.0} {0.1 + 0.2} {s}");  //> 3.5 3.5 3 2 0.30000000000000004 0.1
     return 0;
 }
 ```
@@ -211,8 +211,8 @@ Int main() {
     List(Int) xs = [5, 3, 9];
     List(Int) more = xs.concat([1]);
     List(Int) none = [];
-    println(f"{more} {more[1..3]} {xs.contains(9)} {xs.sum()}");  //> List(Int(64))(5, 3, 9, 1) List(Int(64))(3, 9) true 17
-    println(f"{sort(xs)} {xs.reverse()} {none.len()}");           //> List(Int(64))(3, 5, 9) List(Int(64))(9, 3, 5) 0
+    println(f"{more} {more[1..3]} {xs.contains(9)} {xs.sum()}");  //> [5, 3, 9, 1] [3, 9] true 17
+    println(f"{sort(xs)} {xs.reverse()} {none.len()}");           //> [3, 5, 9] [9, 3, 5] 0
     List(List(Int)) grid = [[1, 2], [3, 4]];
     println(f"{grid[1][0]}");                                      //> 3
     return 0;
@@ -240,11 +240,11 @@ Int main() {
     Map(Str, Int) m2 = m.insert("c", 3).remove("a");
     Int b = m2.get("b") else { 0 };
     Int z = m2["z"] else { -1 };
-    println(f"{m.len()} {m2.len()} {b} {z} {sort(m2.keys())}");  //> 2 2 2 -1 list(b, c)
+    println(f"{m.len()} {m2.len()} {b} {z} {sort(m2.keys())}");  //> 2 2 2 -1 ["b", "c"]
     Set(Int) s = {1, 2, 3};
     Set(Int) t = {2, 3, 4};
     Set(Int) empty = {};
-    println(f"{s.union(t).len()} {sort(s.intersection(t).to_list())} {empty.insert(7).contains(7)}");  //> 4 list(2, 3) true
+    println(f"{s.union(t).len()} {sort(s.intersection(t).to_list())} {empty.insert(7).contains(7)}");  //> 4 [2, 3] true
     return 0;
 }
 ```
@@ -289,14 +289,15 @@ Int main() {
     Line l = Line {.a = p, .b = q, .label = "L"};
     Point { x, y } = q;                        // destructuring binding
     println(f"{x} {y} {l.b.x} {p.x}");         //> 11 2 11 1
-    println(f"{p}");                            //> Point(1, 2)
+    println(f"{p}");                            //> Point { x: 1, y: 2 }
     return 0;
 }
 ```
 
 Record literal fields use `.name = value` (or `name = value` with the colon
-form). `==` on records does not compile today (it fails in code generation):
-compare fields.
+form). `==` works only on numbers, Bool and Str: on records it is a compile
+error ("compare the parts of a P"), so compare fields or write an `eq_p`
+function.
 
 ## Sum types
 
@@ -328,8 +329,8 @@ Int main() {
   error: use `Rect(Dims)` with a record.
 - Patterns are flat: `Name(x)`, `Name`, `_`. No nested patterns
   (`Some(Some(x))`), no literal patterns (`0 =>`, `"a" =>`): use `if`.
-- Printing a payload-less variant with no `Show` gives `null`; define a
-  `Show` instance ([behaviors.md](behaviors.md)).
+- Variants print by name (`Circle(1)`, `Nothing`); define a `Show` instance
+  for custom text ([behaviors.md](behaviors.md)).
 - Generic sums: `type Box(T) = Full(T) | Empty;` then `Box(Int) b = Full(3);`.
 
 ## Type aliases and constraint types
@@ -357,10 +358,10 @@ Int main() {
 }
 ```
 
-Constraint types are checked only where the value is known at compile time.
-A residual value bound to one is **not** checked at run time (use
-`rt_assert`), and a plain `Int` argument does not match a `Positive`
-parameter.
+Known values are checked at compile time (E0301); a residual value bound to
+a constraint type is checked at run time and aborts with `constraint of
+Positive (value > 0) does not hold`. A plain `Int` argument does not match a
+`Positive` parameter: bind it to a `Positive` first.
 
 ## Fixed-capacity types
 
@@ -389,8 +390,8 @@ Int main() {
 Int main() { Str(2) w = "éé"; return 0; }
 ```
 
-`Bytes` / `Bytes(N)` exist but are barely usable (`.len()` on `Bytes` is
-wrong today). Use `List(Int)` for byte data, as the stdlib does.
+`Bytes` (`b"abc"`, `.len()`) and `Bytes(N)` exist, but the stdlib and the
+filesystem provider use `List(Int)` for byte data; prefer it.
 
 ## Closure and builder types
 
@@ -399,12 +400,10 @@ wrong today). Use `List(Int)` for byte data, as the stdlib does.
 
 ## Printing values
 
-`f"{v}"` renders any value: numbers, Bool, Str as is, Dec at its precision,
-`List(Int(64))(1, 2)` for lists (the prefix varies with how the type was
-spelled, `List(Int)(1, 2)` is also seen, and lists returned by `keys()`,
-`to_list()` and friends print as `list(1, 2)`: never parse or golden-test
-this format, join elements yourself), `Point(1, 2)` for records (fields
-positional), maps as `{k: v, ...}`, sets as `{a, b}`, `Some(3)`, and
-`None` as `null`. Records nested inside lists print as `…`.
-`Result` values print as `Some(...)`/`None` (a known quirk): match them.
-Register `Show(T) = f` for your own text ([behaviors.md](behaviors.md)).
+`f"{v}"` renders any value. At top level: numbers, Bool, Str as is, Dec at
+its precision. Containers: lists `[1, 2, 3]`, records
+`Point { x: 1, y: 2 }`, maps `{"a": 1}`, sets `{1, 2}`, variants by name
+(`Some(3)`, `None`, `Ok(3)`, `Err("x")`, `Circle(1)`, `Nothing`); strings
+inside containers are quoted (`["a", "b"]`). A `Show(T)` instance is used
+wherever a `T` appears, including inside lists, options and records
+([behaviors.md](behaviors.md)).

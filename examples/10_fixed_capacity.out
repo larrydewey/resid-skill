@@ -1,4 +1,4 @@
 resid
 7 0 len=4
 a long
-List(Int(64))(7, 8, 0, 0)
+[7, 8, 0, 0]

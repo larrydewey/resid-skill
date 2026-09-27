@@ -116,8 +116,7 @@ Int main() {
 ```
 
 `rt` applies to a primary expression: `rt 5`, `rt "text"`, `rt (a + b)`,
-`rt None`. `rt 1.5m` (a Dec literal) does not parse; use `d4(rt 1)`-style
-conversions for residual Decs.
+`rt None`, `rt 1.5m`.
 
 ## Designing for reduction
 

@@ -28,12 +28,13 @@ Int main() {
 
 - Arms must agree exactly: `if (c) { n } else { i64(0) }` is fine for `Int`,
   but mixing `Int(128)` and a bare literal needs `i128(0)`.
-- An `if` expression without `else` yields the type's zero value; always
-  write the `else`.
+- An `if` used as a value needs an `else` (compile error otherwise).
 - Ternary: `c ? a : b`.
 - `&&`/`||` short-circuit (the right side is not evaluated, not even its
   aborts or effects).
 - A `Void` function cannot `return;` early: use `if/else` around the rest.
+- A non-Void function that can reach its end without `return` is a compile
+  error (`function f can reach its end without a return`).
 
 ## match
 
@@ -60,27 +61,21 @@ Int main() {
 }
 ```
 
-**Keep match arms branch-free.** An arm whose expression contains control
-flow (an `if` expression, `?:`, `&&`/`||`, a nested `match`, a
-`x else { d }` default) currently compiles to broken LLVM IR (`PHI node
-entries do not match predecessors!`). Put that logic in a helper function
-and call it from the arm, or use `if (Variant(x) = e) { ... }` instead of
-`match`. Plain values, arithmetic, calls and f-strings in arms are fine.
+Arms may contain any expression, including `if`, `?:`, `&&`/`||`, a nested
+`match` or an `else { }` default:
 
 ```resid
 type Cmd = Inc(Int) | Reset;
 
-Int clamp_add(Int acc, Int by) { return if (acc + by > 10) { 10 } else { acc + by }; }
-
-Int step(Int acc, Cmd c) {
+Int step(Int acc, Cmd c, Option(Int) cap) {
     return match c {
-        Inc(by) => clamp_add(acc, by),     // the `if` lives in the helper
+        Inc(by) => match cap { Some(m) => if (acc + by > m) { m } else { acc + by }, None => acc + by },
         Reset => 0
     };
 }
 
 Int main() {
-    println(f"{step(8, Inc(5))} {step(3, Inc(2))} {step(9, Reset)}");   //> 10 5 0
+    println(f"{step(8, Inc(5), Some(10))} {step(3, Inc(2), None)} {step(9, Reset, None)}");   //> 10 5 0
     return 0;
 }
 ```
@@ -213,7 +208,7 @@ List(Int) evens_below(Int i, Int n, ListBuf(Int) acc) {
 }
 
 Int main() {
-    println(f"{evens_below(0, 10, ListBuf())}");   //> List(Int(64))(0, 2, 4, 6, 8)
+    println(f"{evens_below(0, 10, ListBuf())}");   //> [0, 2, 4, 6, 8]
     return 0;
 }
 ```

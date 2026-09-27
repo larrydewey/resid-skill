@@ -6,4 +6,4 @@ ok 3 demo.strings
 ok 4 demo.lists
 ok 5 demo.aborts
 ok 6 demo.floats
-ok 7 demo.whole-unit tolerance
+ok 7 demo.one decimal place

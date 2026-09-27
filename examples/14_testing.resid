@@ -4,20 +4,17 @@ import "testing.resid";
 
 Int gcd(Int a, Int b) { return if (b == 0) { a } else { gcd(b, a % b) }; }
 
-// Keep list literals out of the lambdas: two list literals in lambdas of
-// one function currently trip a codegen bug (duplicate @.lty global).
-Int out_of_bounds() { List(Int) xs = [1]; return xs[5]; }
-List(Int) small() { return [1, 2, 3]; }
+Int at(List(Int) xs, Int i) { return xs[i]; }
 
 Int main() {
     List(TestCase) cases = [
         test_case("gcd basics", lambda() { expect(gcd(12, 18)).toEqual(6) }),
         test_case("gcd with zero", lambda() { expect(gcd(7, 0)).toEqual(7) }),
         test_case("strings", lambda() { expect("resid").toMatch("^re[a-z]+$") }),
-        test_case("lists", lambda() { expect(small()).toContain(2) }),
-        test_case("aborts", lambda() { Int closure() f = lambda() { out_of_bounds() }; expect(f).toThrow() }),
-        test_case("floats", lambda() { expect(abs(0.1 + 0.2 - 0.3) < 0.000000001).toBeTrue() }),
-        test_case("whole-unit tolerance", lambda() { expect(2.4).toBeCloseTo(2.0, 1) })
+        test_case("lists", lambda() { expect([1, 2, 3]).toContain(2) }),
+        test_case("aborts", lambda() { Int closure() f = lambda() { at([1], 5) }; expect(f).toThrow() }),
+        test_case("floats", lambda() { expect(0.1 + 0.2).toBeCloseTo(0.3, 9) }),
+        test_case("one decimal place", lambda() { expect(2.44).toBeCloseTo(2.4, 1) })
     ];
     return run_tests("demo", cases);
 }

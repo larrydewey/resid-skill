@@ -187,6 +187,7 @@ import "geometry.resid" (area, perim);   // selected names
 import "geometry.resid" as G;            // G.area(...)
 ```
 
-Paths are file paths relative to the importing file. Only `pub` functions are
-exported (types are visible without `pub`). A missing import file is silently
-ignored today, which then shows up as `undefined variable` errors.
+Paths are relative to the importing file, falling back to the stdlib
+directory (so `import "crypto.resid";` works anywhere). A module that cannot
+be found is E0221. Only `pub` functions are exported (types are visible
+without `pub`).

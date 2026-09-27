@@ -17,32 +17,26 @@ selected, and reduces it like any other known function.
 
 | Behavior | Impl signature | Used by |
 |---|---|---|
-| `Ord(T)` | `Int f(T a, T b)` | `sort(xs, using = Ord(T))` |
-| any name, e.g. `ByAge(T)` | `Int f(T a, T b)` | `sort(xs, using = ByAge(T))` |
-| `Reverse(B(T))` | (combinator) | flips any comparator behavior |
-| `Show(T)` | `Str f(T v)` | every f-string hole of type `T`, including a record field of type `T` |
-| `Ord`/`Eq`/`Hash` for every numeric width, `Ord(Str)` | built in | `sort(xs)` on Int/Float/Str lists picks them automatically |
+| `Ord(T)` | `Int f(T a, T b)` | `sort(xs)` (inserted when it is the unique order for `T`), `sort(xs, using = Ord(T))` |
+| `Reverse(Ord(T))` | (combinator) | flips a comparator: `sort(xs, using = Reverse(Ord(T)))` |
+| `Show(T)` | `Str f(T v)` | every f-string hole of type `T`, including inside records, lists and options |
+| `Ord`/`Eq`/`Hash` for every numeric width, `Ord(Str)` | built in | `sort(xs)` on Int/Float/Str lists |
+| any other name, e.g. `ByPay(T)` | `Int f(T a, T b)` | accepted, but **broken in code generation today** (see below) |
 
 Comparator contract: negative if `a` sorts before `b`, 0 if equal, positive
-if after. `sort` does not change equal elements' order in tests so far, but
-the spec does not promise stability.
+if after. `sort` kept equal elements in order in tests, but the spec does not
+promise stability.
 
-## Ordering: Ord, named orders, Reverse
+## Ordering: Ord and Reverse
 
 ```resid
 type Emp = { Str name; Int age; Int pay; };
 
 Int by_age(Emp a, Emp b) { return a.age - b.age; }
-Int by_pay(Emp a, Emp b) { return a.pay - b.pay; }
+Ord(Emp) = by_age;
 
-Ord(Emp) = by_age;            // the "default" order, still selected explicitly
-ByPay(Emp) = by_pay;          // a second, named order
-
-Str names(List(Emp) xs, Int i, StrBuf b) {
-    if (i >= xs.len()) { return b.finish(); }
-    Str sep = if (i == 0) { "" } else { " " };
-    return names(xs, i + 1, b.push(sep).push(xs[i].name));
-}
+Str show_emp(Emp e) { return e.name; }
+Show(Emp) = show_emp;
 
 Int main() {
     List(Emp) es = [
@@ -50,37 +44,39 @@ Int main() {
         Emp {.name = "bo", .age = 25, .pay = 70},
         Emp {.name = "cy", .age = 31, .pay = 60}
     ];
-    println(names(sort(es, using = Ord(Emp)), 0, StrBuf()));             //> bo cy ann
-    println(names(sort(es, using = Reverse(Ord(Emp))), 0, StrBuf()));    //> ann cy bo
-    println(names(sort(es, using = ByPay(Emp)), 0, StrBuf()));           //> ann cy bo
+    println(f"{sort(es)}");                              //> [bo, cy, ann]
+    println(f"{sort(es, using = Reverse(Ord(Emp)))}");   //> [ann, cy, bo]
     List(Int) xs = [3, 1, 2];
-    println(f"{sort(xs)} {sort(xs, using = Reverse(Ord(Int)))}");        //> List(Int(64))(1, 2, 3) List(Int(64))(3, 2, 1)
+    println(f"{sort(xs)} {sort(xs, using = Reverse(Ord(Int)))}");   //> [1, 2, 3] [3, 2, 1]
     return 0;
 }
 ```
 
 Rules:
 
-- For your own types, `sort(xs)` alone is an error even when exactly one
-  instance exists; always pass `using = ...`.
-- Each instance needs its **own** impl function. Two instances naming the same
-  function (`Ord(T) = c; ByV(T) = c;`) or a repeated instance fails in
-  code generation (`invalid redefinition of function '__cmp_c'`).
-- The instance type must be a **single identifier**: a builtin like `Int`,
-  `Str`, `Float`, `Bool`, or your own record/sum type. `Ord(Int(32))`,
-  `Show(Option(Int))`, `Show(Box(Int))` do not parse or do not check, and an
-  alias does not help. Wrap the value in a record ("newtype") instead.
+- One `Ord(T)` instance per type; `sort(xs)` inserts it, `using =` selects it
+  explicitly. A duplicated instance declaration fails in clang (`invalid
+  redefinition of function '__cmp_c'`); one impl function may serve several
+  types' instances.
+- Instance types may be any type: `Ord(Int(32)) = desc;`,
+  `Ord(Emp) = ...`, `Show(Level) = ...`.
 - A user instance for a builtin type is used when selected explicitly:
   after `Ord(Int) = desc;`, `sort(xs, using = Ord(Int))` sorts descending
-  while plain `sort(xs)` keeps the builtin ascending order. `Show(Int) = f`
-  is ignored: builtin types keep their builtin text.
+  while plain `sort(xs)` keeps the builtin ascending order.
+- Do not define `Show` for builtin types (`Show(Int)`): top-level holes keep
+  the builtin text, but holes inside other `Show` impls start using yours.
 - An impl that uses capabilities makes every `sort` that selects it need them
   too (E0219: "uses (through `by_run`) capability `process`").
+- **Known issue (commit 79f9062):** a behavior with any name other than `Ord`
+  (`ByPay(Emp) = by_pay; sort(es, using = ByPay(Emp))`, also under
+  `Reverse`) fails in clang with `use of undefined value '@__cmp_by_pay'`
+  unless the same impl is also some type's `Ord` instance. For a second
+  order on a type, sort with a comparator closure (next section).
 
-### Multi-key and derived orders
+### Other orders: comparator closures
 
-Compose in the impl function; there are no comparator combinators beyond
-`Reverse`.
+`sort` only takes behaviors, so for extra orders write a small stable merge
+sort that takes a comparator closure (monomorphic: one per element type):
 
 ```resid
 type Row = { Str team; Int score; };
@@ -93,12 +89,25 @@ Int str_cmp(Str a, Str b, Int i) {
     return if (d != 0) { d } else { str_cmp(a, b, i + 1) };
 }
 
-// team ascending, then score descending
+// team ascending, then score descending: compose inside one comparator
 Int team_then_score(Row a, Row b) {
     Int t = str_cmp(a.team, b.team, 0);
     return if (t != 0) { t } else { b.score - a.score };
 }
-Standings(Row) = team_then_score;
+
+List(Row) merge(List(Row) a, List(Row) b, Int closure(Row, Row) cmp, Int i, Int j, ListBuf(Row) out) {
+    if (i >= a.len() && j >= b.len()) { return out.finish(); }
+    if (j >= b.len()) { return merge(a, b, cmp, i + 1, j, out.push(a[i])); }
+    if (i >= a.len()) { return merge(a, b, cmp, i, j + 1, out.push(b[j])); }
+    if (cmp(b[j], a[i]) < 0) { return merge(a, b, cmp, i, j + 1, out.push(b[j])); }
+    return merge(a, b, cmp, i + 1, j, out.push(a[i]));
+}
+
+List(Row) sort_rows(List(Row) xs, Int closure(Row, Row) cmp) {
+    if (xs.len() <= 1) { return xs; }
+    Int mid = xs.len() / 2;
+    return merge(sort_rows(xs[0..mid], cmp), sort_rows(xs[mid..], cmp), cmp, 0, 0, ListBuf());
+}
 
 Str show_row(Row r) { return f"{r.team}:{r.score}"; }
 Show(Row) = show_row;
@@ -108,8 +117,8 @@ Int main() {
         Row {.team = "red", .score = 3}, Row {.team = "blue", .score = 1},
         Row {.team = "red", .score = 9}, Row {.team = "blue", .score = 5}
     ];
-    List(Row) s = sort(rs, using = Standings(Row));
-    println(f"{s[0]} {s[1]} {s[2]} {s[3]}");     //> blue:5 blue:1 red:9 red:3
+    println(f"{sort_rows(rs, lambda(a, b) { team_then_score(a, b) })}");   //> [blue:5, blue:1, red:9, red:3]
+    println(f"{sort_rows(rs, lambda(a, b) { a.score - b.score })}");       //> [blue:1, red:3, blue:5, red:9]
     return 0;
 }
 ```
@@ -122,8 +131,7 @@ for full-range integers and for Floats.
 
 The numeric family gets `Eq`, `Ord` and `Hash` generically: every width has
 them without declarations, and the built-in instance may be named with a
-parenthesized type (only *user* instance declarations are limited to single
-identifiers). The list verbs and math helpers are generic in the same way.
+parenthesized type (`Ord(UInt(16))`). The list verbs and math helpers are generic in the same way.
 
 ```resid
 Int main() {
@@ -189,17 +197,16 @@ Int main() {
     Money m = Money {.cents = 1205};
     Item it = Item {.name = "tea", .price = m};
     println(f"cost {m}");       //> cost $12.05
-    println(f"{it}");           //> Item(tea, $12.05)
+    println(f"{it}");           //> Item { name: "tea", price: $12.05 }
     println(f"{High}");         //> HIGH
     return 0;
 }
 ```
 
-Without `Show`, a payload-less variant prints `null` and a variant with a
-payload prints oddly; define `Show` for every sum type you print. `Show` is
-not applied inside lists (`List(Money)` prints `…` for each element) or
-inside `Option` (prints `Some<Option(T)>`): join lists yourself and match
-options.
+Without `Show`, values print structurally (`Money { cents: 1205 }`,
+variants by name: `High`). With it, the instance is used everywhere a
+`T` appears: `[$1.00, $2.50]` for a `List(Money)`, `Some($3.00)` for an
+option.
 
 ## "Behavioralizing" code
 
@@ -208,16 +215,16 @@ when the choice is known:
 
 | Choice known... | Use | Example |
 |---|---|---|
-| at compile time, per type | behavior instance | `sort(xs, using = ByPay(Emp))`, `Show(Money)` |
+| at compile time, per type | behavior instance | `Ord(Emp)` + `sort(xs)`, `Show(Money)` |
 | at compile time, per call | a named comparator/formatter function, or a default parameter | `fmt(x, width = 8)` |
 | at run time, open set | a closure value (strategy) | `Int closure(Int, Int) pick` in a record |
 | at run time, closed set | a sum type + `match` | `type Mode = Fast | Safe;` |
 
 ### 1. Replace ad-hoc sort helpers with instances
 
-Before (hand-written insertion sort per field) - after: one comparator per
-order, an instance per comparator, `sort(..., using = ...)` at call sites.
-The compiler inserts the comparator; the call sites say which order they mean.
+Before: a hand-written sort per call site. After: the type's natural order
+as `Ord(T)`, so `sort(xs)` and `sort(xs, using = Reverse(Ord(T)))` just
+work; secondary orders go through one shared comparator-closure sort.
 
 ### 2. Put display logic in Show
 
@@ -271,7 +278,10 @@ Int main() {
 Adding a variant makes every non-exhaustive `match` a compile error, which
 is the point: the compiler lists every place that needs the new behavior.
 
-### 5. Newtypes to attach behavior to a builtin
+### 5. Newtypes: a unit-specific order and text
+
+A record around a builtin gives it its own `Ord`/`Show` without changing
+how plain `Float`s sort or print:
 
 ```resid
 type Celsius = { Float deg; };

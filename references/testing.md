@@ -37,27 +37,36 @@ test "needs a grant like any function" {
 - `residc test file.resid [--filter REGEX] [--format pretty|tap|json]`
   discovers the blocks, generates the entry point, runs it and returns 0 (all
   passed), 1 (failures) or 2 (compile error / no tests). The file must not
-  define `main`. **Known issue:** with the current build
-  (`build/boot/stage2.bin test ...`) the generated test binary fails to link
-  (`cannot find entry symbol _start`); until that is fixed, use explicit
-  registration below, which works.
+  define `main`. Filtered-out tests show as `# SKIP filtered` in TAP.
+
+```text
+$ residc test math_test.resid
+math_test
+  ✓ add: identity (0ms)
+  ✓ add: commutativity (0ms)
+  ✓ mul: zero annihilates (0ms)
+  ✓ strings and lists (0ms)
+
+Failures: 0 | Passed: 4 | Duration: 0ms
+```
 
 ## Explicit registration (lib/testing.resid)
 
-Cases are data: a name and a zero-argument closure. `run_tests` prints the
+Use this when cases are generated from data or the file needs its own
+`main`. Cases are data: a name and a zero-argument closure. `run_tests` prints the
 report and returns the exit code.
 
 ```resid
 import "testing.resid";
 
 Int gcd(Int a, Int b) { return if (b == 0) { a } else { gcd(b, a % b) }; }
-Int oob() { List(Int) xs = [1]; return xs[5]; }
+Int at(List(Int) xs, Int i) { return xs[i]; }
 
 Int main() {
     List(TestCase) cases = [
         test_case("gcd", lambda() { expect(gcd(12, 18)).toEqual(6) }),
-        test_case("aborts", lambda() { Int closure() f = lambda() { oob() }; expect(f).toThrow() }),
-        test_case("close", lambda() { expect(abs(0.1 + 0.2 - 0.3) < 0.000000001).toBeTrue() })
+        test_case("aborts", lambda() { Int closure() f = lambda() { at([1], 5) }; expect(f).toThrow() }),
+        test_case("close", lambda() { expect(0.1 + 0.2).toBeCloseTo(0.3, 9) })
     ];
     return run_tests("math", cases);
 }
@@ -78,8 +87,8 @@ A failing case prints `✗ name` with `expectation failed: toEqual`, the
 actual and expected values, and the run exits 1. Environment variables:
 `RESID_TEST_FORMAT=pretty|tap|json`, `RESID_TEST_FILTER=<regex>`.
 
-Import paths are relative to the importing file: copy `lib/testing.resid`
-next to your file, or import it by a relative/absolute path.
+`import "testing.resid";` resolves from anywhere: imports fall back to the
+compiler's stdlib directory (`RESID_HOME/../../lib`, or `./lib`).
 
 ## Matchers
 
@@ -91,7 +100,7 @@ next to your file, or import it by a relative/absolute path.
 | `toHaveLength(n)` | `List(T)` or `Str` | length (code points for Str) |
 | `toContain(x)` | `List(T)` or `Set(T)` | membership |
 | `toMatch(re)` | `Str` | regex subset: `^ $ . * + ? [...]` with ranges and negation (no groups, no `|`) |
-| `toBeCloseTo(x, tol)` | `Float` | `abs(actual - x) <= tol`, where `tol` is an **Int** (so only whole-unit tolerances; for fine tolerances use `expect(abs(a - b) < 0.000001).toBeTrue()`) |
+| `toBeCloseTo(x, digits)` | `Float` | equal to `digits` decimal places: `abs(actual - x) < 0.5 * 10^-digits` (`expect(2.44).toBeCloseTo(2.4, 1)` passes, `2.46` fails) |
 | `toBeNull()` | `Option(T)` | is `None` |
 | `toSatisfy(pred)` | any `T` | `Bool closure(T)` returns true |
 | `toThrow()` | `Ret closure()` | calling it aborts |
@@ -109,11 +118,6 @@ test "all matchers" {
     expect(none).toBeNull();
 }
 ```
-
-Closure-related limits (see [functions-and-closures.md](functions-and-closures.md)):
-build a `toThrow` closure *inside* the case lambda (capturing an outer
-closure variable fails in codegen), and keep list literals in helper
-functions when several case lambdas need them.
 
 There is no property-based testing (`forall`, generators), snapshots,
 fixtures or per-test timeouts yet (SPEC-testing.md phases 2-4).
@@ -139,6 +143,5 @@ rather than the compile-time folded result (`Int n = rt 5;`).
 - Check compile errors in a harness by grepping the compiler output for the
   error code (`E0219`, `E0301`, ...), as the conformance suite's `.compile`
   files do.
-- Golden output: remember maps print in hash order and floats with up to 17
-  significant digits (`0.1` prints `0.10000000000000001`); sort keys before
-  printing.
+- Golden output: remember maps print in hash order and floats in shortest
+  round-trip form; sort keys before printing.

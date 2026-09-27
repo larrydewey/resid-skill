@@ -1,4 +1,4 @@
 zoe: 0.45 after 2 ops; old balance still 10.00
 insufficient funds for zoe
 true false
-Account(zoe, 45, 2)
+Account { owner: "zoe", cents: 45, ops: 2 }

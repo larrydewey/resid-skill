@@ -79,7 +79,6 @@ List(Int) pop(List(Int) stack) {
 
 List(Int) exec(List(Str) lines, Int i, List(Int) stack) {
     if (i >= lines.len()) { return stack; }
-    // Arms stay branch-free (see known issues): the `if` lives in pop().
     List(Int) next = match parse_cmd(lines[i]) {
         Push(v) => stack.concat([v]),
         Pop => pop(stack),
@@ -101,8 +100,9 @@ env) under `@requires`, calls pure functions, prints. Pure functions need
 no grants, fold at compile time when their inputs are known, and are easy
 to test.
 
-**Readable output.** Define `Show` for your types; join lists yourself;
-`sort(m.keys())` before printing a map.
+**Readable output.** Define `Show` for your types (it applies inside lists,
+options and records too); `sort(m.keys())` before printing map entries in
+order.
 
 **Make runtime values explicit in tests and benchmarks** with `rt`.
 
@@ -113,53 +113,33 @@ to test.
 - **Prepending or re-reading an accumulator in a loop**: quadratic
   ([performance-and-memory.md](performance-and-memory.md)).
 - **Reusing a builder** or pushing to a builder inside `for`: E0402/E0403.
-- **Printing a `Result`, an `Option` of records, a list of records or a
-  payload-less variant without `Show`**: gives `Some(..)`, `Some<Option(T)>`,
-  `…`, `null`. Match and format explicitly.
 - **Relying on map iteration order**: it is hash order.
 - **Forgetting `@requires` up the call chain**: every caller needs the
   grant, not just the function that touches the provider.
-- **Using `?` in `main`**: handle errors there with `else`/`match`.
 - **Literal-only products that need headroom**: `Int(128) x = a_lit * b_lit;`
   computes in `Int(64)`. Widen one operand.
-- **Constraint types as validation**: they do not check run-time values.
-- **Missing return path**: a non-Void function whose last path has no
-  `return` still compiles and returns garbage; end every function with a
-  `return` (or an if/else where both branches return).
+- **Constraint types as validation of user input**: a failing residual value
+  aborts the process; validate with `if` and return a `Result` instead.
+- **Defining `Show` for builtin types** (`Show(Int)`): partially applied,
+  confusing output. Wrap in a record instead.
 - **Calling compiler internals** seen in `compiler/` or `runtime/rt/`
   (`resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, `*_persist*`): E0220.
 - **Scientific float literals, `_` digit separators, `{{` in f-strings,
   `try`, `orelse`, `unwrap()`, `x.first()`, `s[i]`**: none exist.
 
-## Known issues in the current compiler (observed; work around them)
+## Known issues in the current compiler (commit 79f9062; work around them)
 
 | Issue | Workaround |
 |---|---|
-| A `match` arm containing control flow (`if` expression, `?:`, `&&`/`||`, a nested `match`, `x else { }`) produces broken LLVM IR (`PHI node entries do not match predecessors!`) | keep arms branch-free: move the logic into a helper function called from the arm, or use `if (V(x) = e)` |
-| `==`/`!=` on records, lists, `Option`, sums fails in clang | compare fields or `match` |
-| A missing return path is not diagnosed (returns garbage) | always end with `return` |
-| Missing `import` file is silently ignored | double-check paths when names are `undefined` |
-| `residc test` binaries fail to link (`_start` missing) | explicit registration with `lib/testing.resid` |
-| `f"{result}"` prints `Some(..)`/`None` for `Ok`/`Err` | match first |
-| Lists from `keys()`/`to_list()` print as `list(..)`; list prefix depends on type spelling | join elements yourself |
-| `Show(Int)` etc. are ignored; `Show` not applied inside lists/options | format explicitly |
-| Behavior instance types must be single identifiers | wrap in a record |
-| Two instances sharing one impl function → clang redefinition | one impl per instance |
-| `sort(xs)` of a user type needs `using =` even with one instance | pass `using = Ord(T)` |
-| Lambda without a typed context (`return lambda..`, record field) fails | bind to a typed name first |
-| Lambda capturing and calling another closure variable fails in codegen | inline or call a named function |
-| Several list literals in lambdas of one function → duplicate `@.lty` global | move literals into helpers |
-| `Void closure` body ending in `println` is `Bool` | call a `Void` helper |
-| `?` in `main` fails in clang | handle in main |
-| Constraint types unchecked for residual values | `rt_assert` / `if` |
-| `@requires(fs(badmode))` is accepted silently (E0213 only fires in sandboxes) | spell modes `readonly`/`readwrite` |
-| `filesystem.write_secret` aborts with `out of memory` (it still creates the 0600 file) | avoid until fixed |
-| `Bytes.len()` returns garbage | use `List(Int)` for bytes |
-| `lib/crypto.resid` `base64_encode` mis-pads (`aGk==` for "hi") | check library output against test vectors |
-| `rt 1.5m` does not parse | `d4(rt 1)` style |
-| `git` provider from the spec is not implemented | use `process.run("git ...")` (exit status only) |
-| `toBeCloseTo(x, tol)` takes an Int absolute tolerance | `expect(abs(a - b) < 0.000001).toBeTrue()` |
-| `if` expression without `else` yields a zero value | always write `else` |
+| A behavior named other than `Ord` (`ByPay(T) = f; sort(xs, using = ByPay(T))`, also under `Reverse`) fails in clang: `use of undefined value '@__cmp_f'` | one `Ord(T)` per type plus `Reverse`; other orders via a comparator-closure merge sort (behaviors.md) |
+| Declaring the same behavior instance twice fails in clang | declare it once |
+| `Show(Int)` (instance on a builtin) applies inside other `Show` impls but not at top level | do not define `Show` for builtin types |
+| `git` provider from the spec: `@requires(git)` accepted, `git.*` calls do not compile | `process.run("git ...")` (exit status only) |
 
-When you hit a clang error about the generated `.ll`, the construct on the
-reported source line is almost always one of the above.
+Language limits (by design or not yet implemented; not bugs): no generic
+functions, flat match patterns only (no nested/literal/guard patterns), one
+payload per variant, no `s[i]`/`<` on `Str`, no global constants, no
+`try`/`orelse`/`unwrap`, no scientific float literals or `_` separators, no
+`{{` escape, `else { }` blocks cannot `return`, `Void` functions cannot
+`return;`, lambdas take untyped parameters, named functions are not values,
+`for` cannot iterate a `Set`/`Map` directly, maps iterate in hash order.
