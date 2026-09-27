@@ -139,5 +139,6 @@ rather than the compile-time folded result (`Int n = rt 5;`).
 - Check compile errors in a harness by grepping the compiler output for the
   error code (`E0219`, `E0301`, ...), as the conformance suite's `.compile`
   files do.
-- Golden output: remember maps print in hash order and floats in shortest
-  round-trip form; sort keys before printing.
+- Golden output: remember maps print in hash order and floats with up to 17
+  significant digits (`0.1` prints `0.10000000000000001`); sort keys before
+  printing.

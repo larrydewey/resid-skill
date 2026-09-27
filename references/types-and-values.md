@@ -107,10 +107,13 @@ Int main() {
 ## Floats
 
 `Float` = `Float(64)`; also `Float(16)`, `Float(32)`, `Float(128)`. Int op
-Float gives the Float type; Float op Float gives the wider. f-strings print the
-shortest round-trip form (`2.0` prints `2`). No scientific literals (`1e10`
-is rejected); no `sqrt`/`sin`/`pow` builtins (write them; see
-[stdlib.md](stdlib.md)). NaN != NaN.
+Float gives the Float type; Float op Float gives the wider. f-strings print
+up to 17 significant digits with trailing zeros dropped (`%.17g` style):
+`2.0` prints `2`, `3.5` prints `3.5`, but `0.1` prints
+`0.10000000000000001` and `3.14` prints `3.1400000000000001`. For fixed
+decimals in output, format yourself or compute in `Dec(N)`. No scientific
+literals (`1e10` is rejected); no `sqrt`/`sin`/`pow` builtins (write them;
+see [stdlib.md](stdlib.md)). NaN != NaN.
 
 ```resid
 Int main() {
@@ -118,6 +121,7 @@ Int main() {
     Float b = (Float)7 / 2.0;
     Int t = (Int)3.99;              // truncates
     Float(32) s = f32(0.1);
+    println(f"{0.1} {3.14}");                    //> 0.10000000000000001 3.1400000000000001
     println(f"{a} {b} {t} {2.0} {0.1 + 0.2} {s}");  //> 3.5 3.5 3 2 0.30000000000000004 0.10000000149011612
     return 0;
 }

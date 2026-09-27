@@ -143,7 +143,7 @@ Int main() {
 | [references/error-codes.md](references/error-codes.md) | every E-code, common messages, post-check failures |
 | [references/idioms-and-antipatterns.md](references/idioms-and-antipatterns.md) | translating habits, idioms, anti-patterns, **known compiler issues** |
 
-`examples/` holds 19 complete programs with their exact expected output
+`examples/` holds 20 complete programs with their exact expected output
 (`NAME.out`): hello, fizzbuzz, word count, shapes, results, behaviors,
 closures, files, numbers, fixed capacity, spawn, sandbox, reduction, testing,
-args/env, tokenizer, BFS, crypto, records.
+args/env, tokenizer, BFS, crypto, records, stdin filter.

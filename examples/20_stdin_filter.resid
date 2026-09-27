@@ -1,0 +1,27 @@
+// Line-oriented stdin processing: resid_read_line() returns one line
+// including its "\n", and "" at end of input. No capability is needed.
+type Totals = { Int lines; Int numbers; Int sum; Int skipped; };
+
+Str chomp(Str s) {
+    return if (str_ends_with(s, "\n")) { str_slice(s, 0, str_len(s) - 1) } else { s };
+}
+
+Totals add_line(Totals t, Str line) {
+    Str w = str_trim(line);
+    if (str_is_int(w)) {
+        return Totals {.lines = t.lines + 1, .numbers = t.numbers + 1, .sum = t.sum + str_parse_int(w), .skipped = t.skipped};
+    }
+    return Totals {.lines = t.lines + 1, .numbers = t.numbers, .sum = t.sum, .skipped = t.skipped + 1};
+}
+
+Totals read_all(Totals t) {
+    Str raw = resid_read_line();
+    if (raw == "") { return t; }                 // EOF
+    return read_all(add_line(t, chomp(raw)));
+}
+
+Int main() {
+    Totals t = read_all(Totals {.lines = 0, .numbers = 0, .sum = 0, .skipped = 0});
+    println(f"lines={t.lines} numbers={t.numbers} sum={t.sum} skipped={t.skipped}");
+    return if (t.skipped > 0) { 1 } else { 0 };
+}

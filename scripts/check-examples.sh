@@ -12,7 +12,8 @@
 # examples/NAME.resid   compiled and run; stdout must equal NAME.out.
 #                       Optional NAME.args (program arguments, one line),
 #                       NAME.exit (expected exit code, default 0),
-#                       NAME.env (VAR=value pairs for the run, one line).
+#                       NAME.env (VAR=value pairs for the run, one line),
+#                       NAME.stdin (fed to the program's standard input).
 #
 # Snippets: every ```resid block in SKILL.md and references/*.md.
 #   - A block with `main(` is compiled and run as is.
@@ -52,9 +53,9 @@ if [ "$KEEP" = 1 ]; then echo "work dir: $WORK"; else trap 'rm -rf "$WORK"' EXIT
 pass=0
 fail=0
 
-# run_one NAME SRC EXPECTED_OUT_FILE|"" EXIT ARGS COMPILE_ERR RUN(1/0) [ENV]
+# run_one NAME SRC EXPECTED_OUT_FILE|"" EXIT ARGS COMPILE_ERR RUN(1/0) [ENV] [STDIN_FILE]
 run_one() {
-    local name="$1" src="$2" want="$3" wexit="$4" args="$5" cerr="$6" run="$7" envs="${8:-}"
+    local name="$1" src="$2" want="$3" wexit="$4" args="$5" cerr="$6" run="$7" envs="${8:-}" input="${9:-/dev/null}"
     local dir="$WORK/$name"
     mkdir -p "$dir"
     cp "$REPO"/lib/*.resid "$dir"/ 2>/dev/null
@@ -73,7 +74,7 @@ run_one() {
     fi
     if [ "$run" = 0 ]; then pass=$((pass + 1)); return; fi
     # shellcheck disable=SC2086
-    { (cd "$dir" && env $envs timeout 60 ./bin $args > "$dir/stdout" 2> "$dir/stderr" < /dev/null); } 2>/dev/null
+    { (cd "$dir" && env $envs timeout 60 ./bin $args > "$dir/stdout" 2> "$dir/stderr" < "$input"); } 2>/dev/null
     local rc=$?
     if [ "$rc" -ne "$wexit" ]; then
         fail=$((fail + 1)); echo "FAIL $name: exit $rc, expected $wexit"; head -3 "$dir/stderr" | sed 's/^/    /'; return
@@ -94,7 +95,8 @@ for f in "$HERE"/examples/*.resid; do
     wexit=0; [ -f "$base.exit" ] && wexit="$(cat "$base.exit")"
     args=""; [ -f "$base.args" ] && args="$(cat "$base.args")"
     envs=""; [ -f "$base.env" ] && envs="$(cat "$base.env")"
-    run_one "ex_$n" "$f" "$base.out" "$wexit" "$args" "" 1 "$envs"
+    input="/dev/null"; [ -f "$base.stdin" ] && input="$base.stdin"
+    run_one "ex_$n" "$f" "$base.out" "$wexit" "$args" "" 1 "$envs" "$input"
 done
 
 # ---- snippets in markdown ----

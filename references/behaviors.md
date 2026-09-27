@@ -70,9 +70,10 @@ Rules:
   `Str`, `Float`, `Bool`, or your own record/sum type. `Ord(Int(32))`,
   `Show(Option(Int))`, `Show(Box(Int))` do not parse or do not check, and an
   alias does not help. Wrap the value in a record ("newtype") instead.
-- Instances for builtin *numeric* types that already have an order may be
-  overridden for `sort` (`Ord(Int) = my_cmp;`), but `Show(Int) = f` is
-  ignored: builtin types keep their builtin text.
+- A user instance for a builtin type is used when selected explicitly:
+  after `Ord(Int) = desc;`, `sort(xs, using = Ord(Int))` sorts descending
+  while plain `sort(xs)` keeps the builtin ascending order. `Show(Int) = f`
+  is ignored: builtin types keep their builtin text.
 - An impl that uses capabilities makes every `sort` that selects it need them
   too (E0219: "uses (through `by_run`) capability `process`").
 
@@ -116,6 +117,56 @@ Int main() {
 Beware `a - b` comparators on values near the Int limits: the subtraction is
 checked and can abort. Use `if (a < b) { -1 } else { if (a > b) { 1 } else { 0 } }`
 for full-range integers and for Floats.
+
+## Built-in generic behaviors and verbs
+
+The numeric family gets `Eq`, `Ord` and `Hash` generically: every width has
+them without declarations, and the built-in instance may be named with a
+parenthesized type (only *user* instance declarations are limited to single
+identifiers). The list verbs and math helpers are generic in the same way.
+
+```resid
+Int main() {
+    List(UInt(16)) a = [u16(300), u16(100), u16(200)];
+    List(UInt(16)) up = sort(a, using = Ord(UInt(16)));
+    List(Float) f = [2.5, -1.0, 0.5];
+    println(f"{up[0]} {sort(f)[0]} {sort(f, using = Reverse(Ord(Float)))[0]}");   //> 100 -1 2.5
+    List(Int(8)) small = [i8(3), i8(-7)];
+    println(f"{small.contains(i8(-7))} {f.contains(0.5)} {f.sum()}");            //> true true 2
+    Int(32) x = i32(-9);
+    println(f"{abs(x)} {min(u16(4), u16(2))} {clamp(1.5, 0.0, 1.0)}");            //> 9 2 1
+    return 0;
+}
+```
+
+- `sort(xs)` inserts the built-in `Ord` for integer, Float and Str elements.
+- `xs.contains(v)` needs integer (up to 64-bit), Float or Str elements;
+  `xs.sum()` needs `List(Int)` or `List(Float)`.
+- `abs`/`min`/`max`/`clamp` accept any single numeric type except Dec.
+- A user function with the same name as a verb (`Int reverse(List(Int) xs)`)
+  takes precedence over the built-in method.
+
+### Ordering a sum type
+
+Map each variant to a rank in the comparator:
+
+```resid
+type Level = Low | Mid | High;
+
+Int rank(Level l) { return match l { Low => 0, Mid => 1, High => 2 }; }
+Int by_rank(Level a, Level b) { return rank(a) - rank(b); }
+Ord(Level) = by_rank;
+
+Str show_level(Level l) { return match l { Low => "low", Mid => "mid", High => "high" }; }
+Show(Level) = show_level;
+
+Int main() {
+    List(Level) ls = [High, Low, Mid, Low];
+    List(Level) s = sort(ls, using = Reverse(Ord(Level)));
+    println(f"{s[0]} {s[1]} {s[2]} {s[3]}");   //> high mid low low
+    return 0;
+}
+```
 
 ## Show: how a type is written
 
