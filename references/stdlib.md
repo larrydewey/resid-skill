@@ -150,7 +150,7 @@ functions are visible.
 | `tls.resid`, `tlsmsg.resid` | TLS 1.3 key schedule, records, handshake messages (client does **not** authenticate servers) |
 | `http.resid`, `h2.resid` | HTTP/1.1 client (`http_get(host, port, path)`, needs `network`), HTTP/2 framing + HPACK |
 | `cose.resid` | CBOR encoding, COSE_Sign1 / COSE_Encrypt0 |
-| `readline.resid` | line editing with history and Tab completion, needs `terminal`: `readline(prompt, History) -> ReadResult`, `readline_with(prompt, h, Str closure(Str) complete)` (candidates one per line), `history_new(max)`, `history_add(h, line)`; `ReadResult` is `Line(Str) \| Eof \| Interrupted`. Not a terminal: prints the prompt and reads one plain line |
+| `readline.resid` | line editing with history and Tab completion, needs `terminal`: `readline(prompt, History) -> ReadResult`, `readline_with(prompt, h, List(Str) closure(Str) complete)` (the candidates for the line), `history_new(max)`, `history_add(h, line)`; `ReadResult` is `Line(Str) \| Eof \| Interrupted`. Not a terminal: prints the prompt and reads one plain line |
 | `testing.resid` | `test_case`, `run_tests` ([testing.md](testing.md)) |
 | `dwarf.resid`, `kgart.resid` | ELF/DWARF reader, knowledge-graph artifact reader (tooling) |
 

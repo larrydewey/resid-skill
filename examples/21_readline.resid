@@ -4,10 +4,10 @@ import "readline.resid";
 // Ctrl-C and Ctrl-D. When stdin is not a terminal (as when this example is
 // checked) readline prints the prompt and reads plain lines.
 
-Str commands(Str prefix) {
+List(Str) commands(Str prefix) {
     List(Str) all = ["help", "history", "quit"];
     List(Str) none = [];
-    return str_join(starting(all, prefix, 0, none), "\n");
+    return starting(all, prefix, 0, none);
 }
 
 List(Str) starting(List(Str) xs, Str p, Int i, List(Str) acc) {

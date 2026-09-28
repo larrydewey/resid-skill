@@ -44,7 +44,8 @@ Int main() {
 
 ## Closures
 
-A closure type is written `Ret closure(Arg1, Arg2)`. A lambda is
+A closure type is written `Ret closure(Arg1, Arg2)`; `Ret` may be any type,
+including a constructed one (`List(Str) closure(Str)`). A lambda is
 `lambda(a, b) { statements; final_expression }`: parameters are untyped (the
 expected closure type supplies them) and the last expression, without `;`, is
 the result. Lambdas capture the variables they mention.
