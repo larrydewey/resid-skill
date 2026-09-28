@@ -2,9 +2,13 @@
 
 Everything is self-hosted Resid. In a Resid checkout the compiler is
 `build/boot/stage2.bin`; `build/boot/residc` is a wrapper that sets
-`RESID_HOME` (where the runtime `rt.ll` lives) and runs it. Examples below
-write `residc`; substitute `/path/to/resid/build/boot/residc` (or run
-`build/boot/stage2.bin` from the checkout root).
+`RESID_HOME` (where the runtime `rt.ll` lives) and runs it. `./install.sh`
+copies the compiler, runtime, stdlib and a signing key to `~/.resid`
+(`RESID_INSTALL` overrides) with `~/.resid/bin/residc` usable from any
+directory; `source ~/.resid/env` puts it on PATH. `./boot.sh` refreshes an
+existing install after every build or reseed (`RESID_NO_INSTALL_REFRESH=1`
+skips); `./uninstall.sh` removes it, keeping the key (`--purge` removes
+all). Examples below write `residc`.
 
 ## Compiling and running
 
@@ -41,8 +45,9 @@ Environment:
 
 | Variable | Use |
 |---|---|
-| `RESID_HOME` | directory holding `rt.ll` (and, two levels up, the stdlib `lib/` used as the import fallback); needed when running `stage2.bin` outside the checkout root (`clang: error: no such file or directory: 'build/boot/rt.ll'` means it is unset) |
-| `RESID_SIGNING_KEY` | secret key file for release builds (else `keys/resid-ed25519.key` relative to the cwd) |
+| `RESID_HOME` | directory holding `rt.ll`, the stdlib (`$RESID_HOME/lib` in an install, else two levels up) and the install's `keys/`; set by both `residc` wrappers, needed only when running `stage2.bin` directly outside the checkout root (`clang: error: no such file or directory: 'build/boot/rt.ll'` means it is unset) |
+| `RESID_SIGNING_KEY` | secret key file for release builds (else `keys/resid-ed25519.key` relative to the cwd, else `$RESID_HOME/keys/resid-ed25519.key`) |
+| `RESID_INSTALL` | install directory for `install.sh` / `uninstall.sh` (default `~/.resid`) |
 | `RESID_MEM_LIMIT` | memory budget in MB for a program (compiler default 4096) |
 | `RESID_TEST_FORMAT`, `RESID_TEST_FILTER` | test runner output and filter |
 

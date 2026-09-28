@@ -88,7 +88,8 @@ actual and expected values, and the run exits 1. Environment variables:
 `RESID_TEST_FORMAT=pretty|tap|json`, `RESID_TEST_FILTER=<regex>`.
 
 `import "testing.resid";` resolves from anywhere: imports fall back to the
-compiler's stdlib directory (`RESID_HOME/../../lib`, or `./lib`).
+compiler's stdlib directory (`$RESID_HOME/lib` in an install, else
+`RESID_HOME/../../lib`, or `./lib`).
 
 ## Matchers
 

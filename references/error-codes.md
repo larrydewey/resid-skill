@@ -12,11 +12,11 @@ quoted from the current compiler.
 | E0001 | type or syntax error (message says which; see next section) | read the message |
 | E0211 | a function inside a sandbox calls one whose `@requires` exceeds the sandbox ceiling ("attenuation is transitive across the call closure") | move the callee out, narrow its needs, or widen the sandbox if you own it |
 | E0212 | a function's needs exceed its ceiling: `function f requires capability c which exceeds the effective capability ceiling [...]`, or a **write** under a read-only grant (`provider call filesystem.write_all is a write operation, but only a read-only grant ...`), or a `File` handle entering a region without `filesystem` | grant the right mode; keep writes out of read-only sandboxes |
-| E0213 | unknown capability family or mode (in `@requires`, sandboxes, ceilings): `unknown capability mode sometimes on filesystem; supported modes are readonly and readwrite`, `unknown capability family filesystm` | spell it: `filesystem, environment, args, process, network`; modes `readonly`/`readwrite` |
+| E0213 | unknown capability family or mode (in `@requires`, sandboxes, ceilings): `unknown capability mode sometimes on filesystem; supported modes are readonly and readwrite`, `unknown capability family filesystm` | spell it: `filesystem, environment, args, process, network, terminal`; modes `readonly`/`readwrite` |
 | E0214 | `spawn (caps)` lists a capability beyond the parent's, or its body uses one not listed: `spawn body uses capabilities its list [..] does not grant: process` | add it to the spawn list (and the parent's `@requires`) or move the call out |
 | E0215 | inside a spawn/restricted region, a call to a function whose `@requires` is not granted there | same as E0214 |
 | E0216 | `import "m" @requires(...)` after `m` was already imported without the bound | import it attenuated first (or only) |
-| E0221 | `cannot find module x.resid imported by ... (looked for ...)` | fix the path; stdlib names like `crypto.resid` resolve through `RESID_HOME/../../lib` |
+| E0221 | `cannot find module x.resid imported by ... (looked for ...)` | fix the path; stdlib names like `crypto.resid` resolve through the install's `lib/` or `RESID_HOME/../../lib` |
 | E0222 | `value name \`X\` must start with a lowercase letter` / `type name ... uppercase` / `single uppercase letters are reserved for type parameters` | rename: values lowercase, types uppercase, types longer than one letter |
 | E0223 | `\`f\` is ambiguous: more than one imported module exports it` | `import "m.resid" as m;` and write `m.f`, or import only one |
 | E0224 | `a library may declare instances only of its own behaviors or types` | declare the instance in the application, or in the library owning the type/behavior |
@@ -38,8 +38,9 @@ Driver-level errors without a code:
 
 - `error: release builds require a signing key: set RESID_SIGNING_KEY or run residc keygen (or build with --profile debug)`
 - `error: --runtime-internals is only for building the compiler ...`
-- `clang: error: no such file or directory: 'build/boot/rt.ll'`: set
-  `RESID_HOME` to the checkout's `build/boot` or run from the checkout root.
+- `clang: error: no such file or directory: 'build/boot/rt.ll'`: use an
+  installed `residc` (`./install.sh`), the checkout's `build/boot/residc`, or
+  set `RESID_HOME` to the checkout's `build/boot`.
 - `test error: no test "..." { ... } blocks found` / `defines main()`.
 
 ## Common E0001 messages

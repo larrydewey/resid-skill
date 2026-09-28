@@ -12,9 +12,13 @@ import by path).
 | `eprintln(s)` | `(Str) -> Bool` | stderr |
 | `print_bytes(bs)` | `(List(Int)) -> Bool` | raw bytes (low 8 bits of each) |
 | `resid_read_line()` | `() -> Str` | one stdin line **including** `\n`; `""` at EOF |
+| `resid_read_byte()` | `() -> Int` | one stdin byte; `-1` at EOF (buffered, mixes with `resid_read_line`) |
 | `resid_crypto_random_byte()` | `() -> Int` | OS randomness, 0..255 |
 
-None of these need a capability. The `Bool` result can be ignored in
+None of these need a capability. The terminal builtins (`resid_term_is_tty`,
+`resid_term_cols`, `resid_term_rows`, `resid_term_raw`, `resid_term_restore`)
+need `terminal` ([capabilities-and-security.md](capabilities-and-security.md));
+for interactive input use `lib/readline.resid` instead of calling them. The `Bool` result can be ignored in
 statement position (`println("x");`).
 
 ## Builtins: strings
@@ -129,8 +133,8 @@ with `file`, `line`, `col`). See [compile-time-reduction.md](compile-time-reduct
 ## Library modules (`lib/` in the Resid repo)
 
 `import "crypto.resid";` works from any directory: a name not found next to
-the importing file falls back to the stdlib directory (`RESID_HOME/../../lib`,
-then `./lib`). A file of the same name next to yours wins. Only `pub`
+the importing file falls back to the stdlib directory (`$RESID_HOME/lib` in
+an install, else `RESID_HOME/../../lib`, then `./lib`). A file of the same name next to yours wins. Only `pub`
 functions are visible.
 
 | Module | Provides (main entry points) |
@@ -146,6 +150,7 @@ functions are visible.
 | `tls.resid`, `tlsmsg.resid` | TLS 1.3 key schedule, records, handshake messages (client does **not** authenticate servers) |
 | `http.resid`, `h2.resid` | HTTP/1.1 client (`http_get(host, port, path)`, needs `network`), HTTP/2 framing + HPACK |
 | `cose.resid` | CBOR encoding, COSE_Sign1 / COSE_Encrypt0 |
+| `readline.resid` | line editing with history and Tab completion, needs `terminal`: `readline(prompt, History) -> ReadResult`, `readline_with(prompt, h, Str closure(Str) complete)` (candidates one per line), `history_new(max)`, `history_add(h, line)`; `ReadResult` is `Line(Str) \| Eof \| Interrupted`. Not a terminal: prints the prompt and reads one plain line |
 | `testing.resid` | `test_case`, `run_tests` ([testing.md](testing.md)) |
 | `dwarf.resid`, `kgart.resid` | ELF/DWARF reader, knowledge-graph artifact reader (tooling) |
 

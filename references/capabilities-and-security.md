@@ -1,7 +1,7 @@
 # Capabilities, sandboxes, concurrency and handles
 
 Resid has **no ambient authority**. External knowledge (files, environment,
-arguments, processes, network) enters only through *providers* and a few
+arguments, processes, network, terminal) enters only through *providers* and a few
 effectful builtins, and every function that reaches one, directly or through
 anything it calls, must be granted the capability. Authority can only be
 narrowed (attenuated) on the way down, never amplified.
@@ -75,11 +75,14 @@ Int main() {
 | `environment` | `environment.get(name)` | `Str` ("" if unset) | read |
 | `args` | `args.count()` / `args.get(i)` | `Int` / `Str` ("" if absent); `get(0)` is the program path | read |
 | `process` | `process.run(cmdline)` | `Int` exit status; no shell, words split on spaces, output goes to the terminal | write |
+| `terminal` | `resid_term_is_tty(fd)` → `Bool` (fd 0–2), `resid_term_cols()` / `resid_term_rows()` → `Int` (80 / 24 if unknown) | | read (builtins) |
+| | `resid_term_raw()` / `resid_term_restore()` → `Bool` (stdin raw mode on/off; the runtime also restores at exit and on abort) | | write (builtins) |
 | `network` | `resid_tcp_connect(host, port)` → fd (`-1` on failure), `resid_tcp_send(fd, Str)`, `resid_tcp_send_bin(fd, List(Int))`, `resid_tcp_recv_all(fd)` → `Str`, `resid_tcp_recv_bin(fd, n)` → `List(Int)`, `resid_tcp_close(fd)` | | builtins |
 
 Not capabilities (always allowed): `print`, `println`, `eprintln`,
 `print_bytes`, `resid_read_line()` (stdin; keeps the trailing `\n`, `""` at
-EOF), `resid_crypto_random_byte()` (OS randomness), allocation, aborts.
+EOF), `resid_read_byte()` (one stdin byte, `-1` at EOF; shares one buffer
+with `resid_read_line`), `resid_crypto_random_byte()` (OS randomness), allocation, aborts.
 
 The spec also lists a `git` provider and `@requires(git)` is accepted, but
 `git.*` calls do not compile yet (`undefined variable git`).

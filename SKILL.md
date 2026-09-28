@@ -117,10 +117,11 @@ Int main() {
 2. **Check** fast: `residc prog.resid --profile check` (type/authority
    errors, no binary).
 3. **Build and run**: `residc prog.resid -o prog --profile debug && ./prog`.
-   In a Resid checkout `residc` is `build/boot/residc` (or run
-   `build/boot/stage2.bin` from the checkout root; elsewhere set
-   `RESID_HOME=<checkout>/build/boot`). Release (default profile, `-O2`)
-   needs a signing key (`residc keygen`, `RESID_SIGNING_KEY`).
+   After `./install.sh` in a Resid checkout, `residc` is `~/.resid/bin/residc`
+   and works from any directory (no `RESID_HOME`; it also has a signing key).
+   Without an install, use the checkout's `build/boot/residc`. Release
+   (default profile, `-O2`) needs a signing key (the install's, `residc
+   keygen`, or `RESID_SIGNING_KEY`).
 4. **Read errors**: `error[E0001]: type error: <message>` with a caret; the
    message says what to change ([references/error-codes.md](references/error-codes.md)).
    `residc test prog.resid` runs its `test "..." { }` blocks. A clang/LLVM
@@ -152,7 +153,7 @@ Int main() {
 | [references/error-codes.md](references/error-codes.md) | every E-code, common messages, post-check failures |
 | [references/idioms-and-antipatterns.md](references/idioms-and-antipatterns.md) | translating habits, idioms, anti-patterns, **known compiler issues** |
 
-`examples/` holds 20 complete programs with their exact expected output
+`examples/` holds 21 complete programs with their exact expected output
 (`NAME.out`): hello, fizzbuzz, word count, shapes, results, behaviors,
 closures, files, numbers, fixed capacity, spawn, sandbox, reduction, testing,
-args/env, tokenizer, BFS, crypto, records, stdin filter.
+args/env, tokenizer, BFS, crypto, records, stdin filter, readline REPL.

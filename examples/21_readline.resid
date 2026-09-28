@@ -1,0 +1,36 @@
+import "readline.resid";
+
+// A small REPL on lib/readline.resid: history, Tab completion of commands,
+// Ctrl-C and Ctrl-D. When stdin is not a terminal (as when this example is
+// checked) readline prints the prompt and reads plain lines.
+
+Str commands(Str prefix) {
+    List(Str) all = ["help", "history", "quit"];
+    List(Str) none = [];
+    return str_join(starting(all, prefix, 0, none), "\n");
+}
+
+List(Str) starting(List(Str) xs, Str p, Int i, List(Str) acc) {
+    if (i >= xs.len()) { return acc; }
+    return starting(xs, p, i + 1, if (str_starts_with(xs[i], p)) { acc.concat([xs[i]]) } else { acc });
+}
+
+@requires(terminal)
+Int handle(History h, Str line) {
+    if (line == "quit") { return 0; }
+    Str reply = if (line == "history") { f"{h.items}" } else { f"echo: {line}" };
+    println(reply);
+    return repl(history_add(h, line));
+}
+
+@requires(terminal)
+Int repl(History h) {
+    return match readline_with("> ", h, lambda(s) { commands(s) }) {
+        Line(s) => handle(h, s),
+        Interrupted => repl(h),
+        Eof => 0,
+    };
+}
+
+@requires(terminal)
+Int main() { return repl(history_new(100)); }

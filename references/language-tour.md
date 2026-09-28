@@ -158,8 +158,8 @@ Int main() {
 ```
 
 Every function that reaches a provider (`filesystem`, `environment`, `args`,
-`process`) or an effectful builtin (TCP = `network`) directly *or through any
-callee* must declare `@requires(...)`, all the way up to `main` (E0219).
+`process`) or an effectful builtin (TCP = `network`, TTY queries and raw
+mode = `terminal`) directly *or through any callee* must declare `@requires(...)`, all the way up to `main` (E0219).
 Printing, stdin and randomness need nothing. See
 [capabilities-and-security.md](capabilities-and-security.md).
 
