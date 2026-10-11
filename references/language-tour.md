@@ -54,17 +54,19 @@ Int f(Int x) {
 
 | Kind | Syntax |
 |---|---|
-| Integers | `Int`=`Int(64)`, `Int(8..512)`, `UInt`=`UInt(64)`, `UInt(8..512)`, `ISize`, `USize` |
+| Integers | `Int`=`Int(64)`, `Int(N)`/`UInt(N)` for N in 8, 16, 32, 64, 128, 256, 512, `UInt`=`UInt(64)`, `ISize`, `USize` |
 | Floats | `Float`=`Float(64)`, `Float(16/32/128)` |
 | Decimal | `Dec`=`Dec(34)`, `Dec(N)` any N >= 1; literal `1.5m` |
 | Text | `Str` (UTF-8, indexed by code point via builtins), char literal `'a'` is an `Int` |
 | Collections | `List(T)`, `Map(K, V)`, `Set(T)` (persistent, immutable) |
 | Absence / failure | `Option(T)` = `Some(v)`/`None`, `Result(T, E)` = `Ok(v)`/`Err(e)` |
 | Records | `type P = { Int x; Int y; };` (also `{ x: Int, y: Int }`) |
-| Sums | `type S = A(T) | B | C(U);` (at most one payload per variant) |
-| Generic sums | `type Box(T) = Full(T) | Empty;` |
+| Sums | `type S = A(T) \| B \| C(U, V);` (any number of payloads per variant) |
+| Generic sums | `type Box(T) = Full(T) \| Empty;` |
 | Aliases / constraints | `type Word = Int(32);`  `type Pos = Int[value > 0];` |
 | Fixed capacity | `Str(N)`, `Bytes(N)`, `List(T, N)` |
+| Bytes | `b"..."` is a heap `Bytes` (no indexing, ends at its first zero byte); `Bytes(N)` keeps zeros |
+| Vectors | `Vec(T, N)` (SIMD lanes; see types-and-values.md) |
 | Closures | `Ret closure(A, B)` |
 | Builders | `StrBuf`, `ListBuf(T)` (linear: use each value exactly once) |
 
@@ -90,7 +92,9 @@ Int main() {
 }
 ```
 
-Loops that carry state are tail-recursive functions (compiled to jumps).
+Loops that carry state are tail-recursive functions (compiled to jumps);
+`while (cond) { ... }` exists but, with no mutation, is only useful with
+`break` or an external condition.
 See [control-flow.md](control-flow.md).
 
 ## Functions
@@ -158,9 +162,12 @@ Int main() {
 ```
 
 Every function that reaches a provider (`filesystem`, `environment`, `args`,
-`process`) or an effectful builtin (TCP = `network`, TTY queries and raw
-mode = `terminal`) directly *or through any callee* must declare `@requires(...)`, all the way up to `main` (E0219).
-Printing, stdin and randomness need nothing. See
+`process`, `clock`) or an effectful builtin (TCP = `network`, TTY queries and
+raw mode = `terminal`, the window server = `display`, a `@link` native
+call = `native_<m>`) directly *or
+through any callee* must declare `@requires(...)`, all the way up to `main`
+(E0219). Printing, stdin and randomness need nothing; reading the time does
+(`clock(readonly)`). See
 [capabilities-and-security.md](capabilities-and-security.md).
 
 ## Compile-time reduction
@@ -186,10 +193,11 @@ binary. See [compile-time-reduction.md](compile-time-reduction.md).
 //! skip -- needs a second file; see the text below
 import "geometry.resid";                 // everything pub
 import "geometry.resid" (area, perim);   // selected names
-import "geometry.resid" as G;            // G.area(...)
+import "geometry.resid" as G;            // G.area(...), G.Shape
 ```
 
 Paths are relative to the importing file, falling back to the stdlib
 directory (so `import "crypto.resid";` works anywhere). A module that cannot
 be found is E0221. Only `pub` functions are exported (types are visible
-without `pub`).
+without `pub`). A name two imports both export must be qualified through an
+alias; an ambiguous unqualified use is E0223.

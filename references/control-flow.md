@@ -80,8 +80,29 @@ Int main() {
 }
 ```
 
-Patterns are flat: `Variant(name)`, `Variant`, `_`. There are no literal,
-range, guard or nested patterns. Dispatch on numbers/strings with `if` chains:
+A variant pattern binds one name per payload, in order (`Rect(w, h)`), or
+none for a variant without payload; `_` discards a position (`Rect(_, h)`),
+and a binding list is all-or-nothing (`Rect(w)` against a two-payload `Rect`
+is an error).
+
+```resid
+type Shape = Circle(Int) | Rect(Int, Int) | Dot;
+
+Int area(Shape s) {
+    return match s { Circle(r) => 3 * r * r, Rect(w, h) => w * h, Dot => 0 };
+}
+
+Int height(Shape s) { return match s { Rect(_, h) => h, _ => 0 }; }
+
+Int main() {
+    println(f"{area(Rect(2, 5))} {area(Circle(1))} {height(Rect(2, 5))}");   //> 10 3 5
+    return 0;
+}
+```
+
+Patterns are flat: `Variant(names)`, `Variant`, `_`. There are no literal,
+range, guard or nested patterns (`Some(Some(x))` and `1 => ...` are compile
+errors). Dispatch on numbers/strings with `if` chains:
 
 ```resid
 Str word(Int n) {
@@ -100,6 +121,11 @@ Int main() {
 //! compile-error: match is not exhaustive
 type Rgb = R | G | B;
 Str n(Rgb c) { return match c { R => "r", G => "g" }; }
+```
+
+```resid
+//! compile-error: match arm pattern must be a variant name or _
+Str name(Int n) { return match n { 1 => "one", _ => "many" }; }
 ```
 
 ## if-let, while-let, destructuring
@@ -124,8 +150,12 @@ Int main() {
 }
 ```
 
-`while (Some(x) = expr) { ... }` exists, but without mutation the condition
-only changes if `expr` reads something external; it is rarely what you want.
+if-let and destructuring take single-payload variants only (`Some(v)`,
+`Ok(v)`, `Some(_)`); take a multi-payload variant apart with `match`.
+
+`while (cond) { ... }` and `while (Some(x) = expr) { ... }` exist, but without
+mutation the condition only changes if it reads something external, so a
+`while` loop either exits through `break` or is rarely what you want.
 
 ## for-in
 

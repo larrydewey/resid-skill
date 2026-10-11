@@ -35,23 +35,46 @@ Result(Config, Str) parse_config(Str line) {
     return Ok(Config {.host = parts[0], .port = port});
 }
 
-Str show(Result(Config, Str) r) {
+Str describe(Result(Config, Str) r) {
     return match r { Ok(c) => f"{c.host} on {c.port}", Err(e) => "error: " + e };
 }
 
 Int main() {
-    println(show(parse_config("example.org:443")));   //> example.org on 443
-    println(show(parse_config("example.org:http")));  //> error: port is not a number: http
-    println(show(parse_config("nope")));              //> error: expected host:port
+    println(describe(parse_config("example.org:443")));   //> example.org on 443
+    println(describe(parse_config("example.org:http")));  //> error: port is not a number: http
+    println(describe(parse_config("nope")));              //> error: expected host:port
     return 0;
 }
 ```
 
 - `?` works in functions returning `Option` or `Result`. Match the kinds:
   `Option` inside an `Option` function, `Result` inside a `Result` function
-  with the same error type.
+  with the same error type. The checker does not enforce this yet: a
+  mismatch compiles, then returns an empty error (`Err("")`, `None`) or
+  crashes. Convert first (`match`, or `else` plus an explicit `return Err(...)`).
 - `?` in a function that returns neither (such as `Int main()`) is a compile
   error; handle the value there with `else` or `match`.
+
+The same in an `Option` function, and `if` on one case of a `Result`:
+
+```resid
+Option(Int) first_even(List(Int) xs) {
+    for (Int x in xs) { if (x % 2 == 0) { return Some(x); } }
+    return None;
+}
+
+Option(Int) half_first_even(List(Int) xs) {
+    Int e = first_even(xs)?;
+    return Some(e / 2);
+}
+
+Int main() {
+    println(f"{half_first_even([3, 8])} {half_first_even([1])}");   //> Some(4) None
+    Result(Int, Str) r = Err("bad");
+    if (Err(msg) = r) { println(msg); }                            //> bad
+    return 0;
+}
+```
 
 ## `else` defaults
 
@@ -68,7 +91,8 @@ Int main() {
 ```
 
 The `else` block must produce a value of the payload type. It cannot
-`return`, `break` or abort with `todo()` (those are `Void`). For an early
+`return` or `break` (a parse error), and `todo()` there is `Void` (a type
+error). For an early
 exit, use `?`, `match` or `if (Some(v) = e) ... else { return ...; }`:
 
 ```resid
@@ -146,9 +170,9 @@ want your own wording.
 | checked conversion out of range (`u8(300)`) | `numeric conversion out of range` |
 | `xs[i]` out of range | `list index out of bounds: index 3, length 1` |
 | `assert(c, msg)` / `rt_assert(c, msg)` false | `assertion failed: msg` |
-| `todo(msg)` / `unimplemented(msg)` reached | `not yet implemented: msg` |
+| `todo(msg)` / `unimplemented(msg)` reached | `not yet implemented: msg` / `not implemented: msg` |
 | refutable binding `Some(v) = none_value;` | `irrefutable pattern did not match` |
-| residual value bound to a constraint type that fails it | `constraint of Positive (value > 0) does not hold` |
+| run-time value bound to a constraint type that fails it | `constraint of Positive (value > 0) does not hold` |
 | Dec division by zero / non-integral Dec to Int | `dec: division by zero` / `dec: non-integer to Int` |
 | memory budget exceeded | `memory budget exceeded (N MB); set RESID_MEM_LIMIT (MB) to raise it` |
 
@@ -175,13 +199,14 @@ Int risky(Int i) { List(Int) xs = [1]; return xs[i]; }
 Int main() {
     Int n = rt 5;
     Result(Int, RegionError) r = spawn () { return risky(n); };
-    Str s = match r { Ok(v) => f"ok {v}", Err(e) => "region failed" };
-    println(s);          //> region failed
+    Str s = match r { Ok(v) => f"ok {v}", Err(e) => "failed: " + e.message };
+    println(s);          //> failed: list index out of bounds: index 5, length 1
     return 0;
 }
 ```
 
-`RegionError` has one field, `message: Str`.
+`RegionError` has one field, `message`: the abort text. A failed native
+call inside the region arrives the same way (spec §47).
 
 ## Checked vs. explicit arithmetic
 

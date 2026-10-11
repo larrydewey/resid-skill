@@ -1,0 +1,25 @@
+// Regular expressions (lib/regex.resid, pure, no capability): compile once,
+// then find, capture by name, replace and split. Offsets are codepoints.
+import "regex.resid";
+
+Str field(Regex re, RegexMatch m, Str line, Str name) {
+    return regex_named(re, m, line, name) else { "" };
+}
+
+Str summarize(Regex re, Str line) {
+    return match (regex_captures(re, line)) {
+        Some(m) => f"{field(re, m, line, "level"):width 5, left}|{field(re, m, line, "msg")}",
+        None => f"skip: {line}",
+    };
+}
+
+Int main() {
+    Regex re = regex("^\\[(?P<level>[A-Z]+)\\] (?P<msg>.*)$");
+    List(Str) lines = ["[INFO] started", "[WARN] disk 91%", "garbage"];
+    for (Str l in lines) { println(summarize(re, l)); }
+    Regex digits = regex("[0-9]+");
+    println(f"{regex_count(digits, "a1 b22 c333")} numbers");
+    println(regex_replace_all(digits, "a1 b22 c333", "#"));
+    println(f"{regex_split(regex(",\\s*"), "x, y,z")}");
+    return 0;
+}

@@ -36,8 +36,15 @@ test "needs a grant like any function" {
 - In a normal build, test blocks are checked but not run.
 - `residc test file.resid [--filter REGEX] [--format pretty|tap|json]`
   discovers the blocks, generates the entry point, runs it and returns 0 (all
-  passed), 1 (failures) or 2 (compile error / no tests). The file must not
-  define `main`. Filtered-out tests show as `# SKIP filtered` in TAP.
+  passed), 1 (failures) or 2 (compile error, no test blocks, or the file
+  defines `main`). Filtered-out tests show as `- name (skipped)` in pretty
+  output (with `Skipped: N` in the summary) and `# SKIP filtered` in TAP.
+- `residc test [--root DIR] [--filter REGEX] [--format F]` with no file runs
+  every `*_test.resid` under `DIR` (default `.`), one binary per file, and
+  exits 2 if any file failed to compile, else 1 on any failure.
+- Known discovery bug at HEAD: a `test` block that directly follows a record
+  declaration (`type Point = { Int x; Int y; };`) is not found ("no `test`
+  blocks found"). Put the tests first, or a function between.
 
 ```text
 $ residc test math_test.resid
@@ -83,9 +90,13 @@ math
 Failures: 0 | Passed: 3 | Duration: 0ms
 ```
 
-A failing case prints `✗ name` with `expectation failed: toEqual`, the
-actual and expected values, and the run exits 1. Environment variables:
-`RESID_TEST_FORMAT=pretty|tap|json`, `RESID_TEST_FILTER=<regex>`.
+A failing case prints `✗ name`, then `expectation failed: toEqual` and the
+actual and expected values, and the run exits 1. The program reads
+`RESID_TEST_FORMAT=pretty|tap|json` and `RESID_TEST_FILTER=<regex>` (a
+search over the case name); `residc test` sets both from its own `--format`
+and `--filter`, so set them only when running a binary directly.
+`property_case(name, body)` registers a case the same way; it runs `body`
+once (no generators yet).
 
 `import "testing.resid";` resolves from anywhere: imports fall back to the
 compiler's stdlib directory (`$RESID_HOME/lib` in an install, else
@@ -95,16 +106,30 @@ compiler's stdlib directory (`$RESID_HOME/lib` in an install, else
 
 | Matcher | Receiver | Checks |
 |---|---|---|
-| `toEqual(v)` / `toBe(v)` | any | structural equality |
+| `toEqual(v)` / `toBe(v)` | any | equality (see the bug below) |
 | `toNotEqual(v)` | any | inequality |
 | `toBeTrue()` / `toBeFalse()` | `Bool` | |
 | `toHaveLength(n)` | `List(T)` or `Str` | length (code points for Str) |
-| `toContain(x)` | `List(T)` or `Set(T)` | membership |
-| `toMatch(re)` | `Str` | regex subset: `^ $ . * + ? [...]` with ranges and negation (no groups, no `|`) |
-| `toBeCloseTo(x, digits)` | `Float` | equal to `digits` decimal places: `abs(actual - x) < 0.5 * 10^-digits` (`expect(2.44).toBeCloseTo(2.4, 1)` passes, `2.46` fails) |
+| `toContain(x)` | `List(T)` or `Set(T)` | membership (not `Str` or `Map`) |
+| `toMatch(re)` | `Str` | regex search anywhere in the string, `lib/regex.resid` syntax: classes, `\d \w \s`, anchors, groups, `\|`, counted repeats, flags `(?i)` (ASCII folding), `(?m)`, `(?s)`, `(?x)`; a pattern that does not compile matches nothing |
+| `toBeCloseTo(x, digits)` | `Float` | equal to `digits` decimal places: `abs(actual - x) < 0.5 * 10^-digits` (`expect(2.44).toBeCloseTo(2.4, 1)` passes, `2.46` fails); `digits` is required |
 | `toBeNull()` | `Option(T)` | is `None` |
 | `toSatisfy(pred)` | any `T` | `Bool closure(T)` returns true |
 | `toThrow()` | `Ret closure()` | calling it aborts |
+
+**Bug at HEAD:** on a `List`, `Set`, `Map` or record (also inside an `Option`), `toEqual` always
+passes and `toNotEqual` always fails, whatever the values. It works on
+scalars, `Str`, and `Option` or sum values of those. Until it is fixed, compare the
+printed form or the parts:
+
+```resid
+test "lists by their text" {
+    List(Int) xs = [3, 1, 2];
+    expect(f"{sort(xs)}").toEqual("[1, 2, 3]");
+    expect(xs).toHaveLength(3);
+    expect(xs[0]).toEqual(3);
+}
+```
 
 ```resid
 test "all matchers" {
@@ -121,14 +146,14 @@ test "all matchers" {
 ```
 
 There is no property-based testing (`forall`, generators), snapshots,
-fixtures or per-test timeouts yet (SPEC-testing.md phases 2-4).
+custom matchers, parallel runs or per-test timeouts yet (SPEC-testing.md lists them as not implemented).
 
 ## Golden tests
 
 For whole programs, compare stdout and exit status. A minimal harness:
 
 ```sh
-stage2.bin prog.resid -o /tmp/prog --profile debug && /tmp/prog > got.txt; echo $? > got.exit
+residc prog.resid -o /tmp/prog --profile debug && /tmp/prog > got.txt; echo $? > got.exit
 diff -u want.txt got.txt && diff want.exit got.exit
 ```
 

@@ -3,9 +3,11 @@
 A behavior is **compile-time knowledge about a type**, stated from outside
 the type: "how to order a `T`", "how to show a `T`". It is not a trait
 system (the spec lists those as non-goals): a type never declares what it
-implements, verbs are plain functions (no methods), nothing dispatches at
-run time, behaviors do not inherit, and a behavior holds no types of its
-own. Every instance is chosen at compile time, before reduction.
+implements, nothing dispatches at run time, behaviors do not inherit, and a
+behavior holds no types of its own. Every instance is chosen at compile
+time, before reduction. A verb may be *written* as a method on its receiver
+(`c.area()` is `area(c)`), but it is still a plain function underneath, and
+the receiver is only the verb's first parameter.
 
 ## Declaring a behavior and instances
 
@@ -63,14 +65,105 @@ Int main() {
 |---|---|---|---|
 | `Eq(T)` | `eq` | `Bool f(T a, T b)` | `==`, `!=` on types without built-in equality |
 | `Ord(T)` | `compare` | `Int f(T a, T b)` | `sort`, `Reverse`, `<` `<=` `>` `>=` |
+| `Ord(T)` | `least`, `greatest` | `T f(T a, T b)` | `a.least(b)`, `a.greatest(b)` |
+| `Bounded(T)` | `min`, `max` | `T f()` | `x.min()`, `x.max()` — the type's bounds |
 | `Hash(T)` | `hash` | `Int f(T x)` | the verb |
 | `Show(T)` | `show` | `Str f(T x)` | f-string holes (also nested in records, lists, options) |
 | `Serialize(T)` | `serialize` | `Str f(T x)` | the verb |
 | `Allocator(T)` | `allocate` | `T f()` | the verb |
 
-Numbers and `Str` have built-in instances (`"a" < "b"` works, `compare(1, 2)`
-is `-1`). `Show` cannot be given for numbers, `Bool` or `Str`. A function of
-your own named `show`, `hash`, ... wins over the verb.
+Built-in instances: `Eq` for every number width, `Str` and `Bool`; `Ord`
+for every number width and `Str` (`"a" < "b"` works, `compare(1, 2)` is
+`-1`); `Hash` for every integer width, `Str` and `Bool` (not `Float`);
+`Bounded` for `Bool`, `Int(N)` and `UInt(N)`. `Show` and `Serialize` have a
+generic default (the structural text); `Show` cannot be given for numbers,
+`Bool` or `Str`. Records and sum types have no built-in `Eq` or `Ord`:
+`==` on a record is an error until you declare `Eq(T)`, and an `Ord`
+instance does not give `==`.
+
+`Ord` has three verbs, so its instance is a **record naming all three**:
+
+```resid
+type Emp = { Str name; Int age; };
+Int by_age(Emp a, Emp b) { return a.age - b.age; }
+Ord(Emp) = by_age;
+//! compile-error: behavior Ord has several functions; give a record
+```
+
+A single-verb behavior takes the function directly. A record is
+`,`-separated, ends with `;`, and must name every verb: a missing verb or
+one the behavior does not declare is an error.
+
+**Reading a verb as a method.** `a.compare(b)` is `compare(a, b)`, and a
+verb that takes no argument takes its type from the receiver:
+
+```resid
+Int main() {
+    Int(8) x = 100;
+    Int(8) lo = x.min();
+    Int(8) hi = x.max();
+    println(f"{lo} {hi}");   //> -128 127
+    return 0;
+}
+```
+
+`x.min()` and `x.max()` are `Bounded`'s: the type's bounds. A verb name
+belongs to one behavior; when two behaviors declare it, the one declared
+last owns it, and the prelude comes after the program, so a behavior of
+your own cannot reuse a prelude verb's name (no diagnostic: the calls
+silently go to the prelude's behavior). `Ord`'s two-argument verbs are
+`least` and `greatest`:
+
+```resid
+type Emp = { Str name; Int age; };
+Int by_age(Emp a, Emp b) { return a.age - b.age; }
+Emp younger(Emp a, Emp b) { return if (a.age <= b.age) { a } else { b }; }
+Emp older(Emp a, Emp b) { return if (a.age >= b.age) { a } else { b }; }
+Ord(Emp) = { .compare = by_age, .least = younger, .greatest = older };
+
+Int main() {
+    Emp a = Emp {.name = "a", .age = 30};
+    Emp b = Emp {.name = "b", .age = 40};
+    Emp lo = a.least(b);     // Ord's least
+    Emp hi = a.greatest(b);  // Ord's greatest
+    println(lo.name + " " + hi.name);   //> a b
+    return 0;
+}
+```
+
+`min(a, b)` on a record is the *numeric builtin* and wants numbers, which
+is why `Ord` is not spelled min/max in the first place.
+
+A zero-argument verb is not passed its receiver; the types come from the
+receiver, the expected type, or the enclosing `@needs`. A bare `max()` has
+no receiver, so give it an expected type: `Int(8) hi = max();`. `min(x)`
+is an error (the verb takes no argument). Your own behaviors work the same
+way:
+
+```resid
+behavior Default(T) { T dflt(); }
+type Port = { Int n; };
+Port port80() { return Port {.n = 80}; }
+Default(Port) = port80;
+
+Int main() {
+    Port p = dflt();
+    Port q = Port {.n = 1}.dflt();
+    println(f"{p.n} {q.n}");   //> 80 80
+    return 0;
+}
+```
+
+**A name is a verb or a function, never both (E0231)**, program-wide. You
+cannot define a function called `min`, `max`, `least`, `greatest`, `show`,
+`hash`, `eq`, `compare`, `serialize` or `allocate`, nor one named after a
+verb of your own behaviors. To override a behavior, declare an instance or
+pass `using =`.
+
+```resid
+Int least(Int a, Int b) { return a; }
+//! compile-error: E0231
+```
 
 ## Ordering: Ord and Reverse
 
@@ -78,7 +171,12 @@ your own named `show`, `hash`, ... wins over the verb.
 type Emp = { Str name; Int age; Int pay; };
 
 Int by_age(Emp a, Emp b) { return a.age - b.age; }
-Ord(Emp) = by_age;
+// least/greatest written once, generic over any Ord type
+@needs(Ord(T))
+T lesser(T a, T b) { return if (compare(a, b) <= 0) { a } else { b }; }
+@needs(Ord(T))
+T greater(T a, T b) { return if (compare(a, b) >= 0) { a } else { b }; }
+Ord(Emp) = { .compare = by_age, .least = lesser, .greatest = greater };
 
 Str show_emp(Emp e) { return e.name; }
 Show(Emp) = show_emp;
@@ -99,7 +197,10 @@ Int main() {
 ```
 
 - One instance per behavior and type; `sort(xs)` inserts it, `using =`
-  selects another: `sort(es, using = by_pay)` with a comparator function.
+  selects another: `sort(es, using = by_pay)` with a comparator function,
+  `Reverse(by_pay)` for its reverse. `Reverse` nests.
+- `sort` is stable: equal elements keep their order, so sorting by a
+  secondary key and then a primary one gives a two-key order.
 - Comparator contract: negative, zero or positive. Beware `a - b` near the
   Int limits (checked subtraction can abort).
 - An impl that uses capabilities makes every user need them (E0219).
@@ -136,13 +237,15 @@ Int main() {
   `@needs(Ord(T))`, `f"{x}"` needs `Show(T)`, `==` needs `Eq(T)`, `<` needs
   `Ord(T)`, a verb call needs its behavior (E0226 otherwise).
 - Calls infer parameters from arguments, then the expected type
-  (`List(Int) xs = empty();`); otherwise E0227. Lambdas, `ListBuf()` and
-  `[]` passed to generic calls get their types from the other arguments.
+  (`List(Int) xs = empty();` for a `List(T) empty()`); otherwise E0227.
+  Lambdas, `ListBuf()` and `[]` passed to generic calls get their types
+  from the other arguments.
 - Each concrete call calls a copy made before reduction; records get one
   layout per concrete type. Polymorphic recursion is E0228. Lambdas are not
   generic; named functions are still not values.
 - Only single letters are parameters: an unknown multi-letter type name is
-  an error ("unknown type `Pint` (did you mean `Point`?)").
+  an error ("unknown type `Pint` (did you mean `Point`?)"), and a type you
+  declare cannot have a one-letter name (E0222).
 
 ### Instances for generic types, derivations, overrides
 
@@ -155,7 +258,9 @@ Str show_pair(Pair(T) p) { return f"<{p.a}|{p.b}>"; }
 Show(Pair(T)) = show_pair;
 
 Int by_p(Task a, Task b) { return a.p - b.p; }
-Ord(Task) = by_p;
+Task lesser(Task a, Task b) { return if (by_p(a, b) <= 0) { a } else { b }; }
+Task greater(Task a, Task b) { return if (by_p(a, b) >= 0) { a } else { b }; }
+Ord(Task) = { .compare = by_p, .least = lesser, .greatest = greater };
 @needs(Ord(T))
 Bool eq_from_ord(T a, T b) { return compare(a, b) == 0; }
 Eq(Task) = eq_from_ord;
@@ -172,7 +277,56 @@ Int main() {
 ```
 
 `using = f`, `using = B(T)` or `using = Reverse(..)` overrides a behavior at
-one verb call, `sort`, or generic call (the copy uses the override).
+one verb call, `sort`, or generic call (the copy uses the override for its
+verb calls, operators and `sort`, but not for f-string holes: see the known
+issues in idioms-and-antipatterns.md).
+
+### Behavior types fixed by the one fitting instance or need
+
+A behavior type that no argument or result fixes comes from the one
+enclosing `@needs`, else the one instance, that fits the known types.
+Several candidates, or none, is E0227. A type parameter may even appear only
+in `@needs`:
+
+```resid
+type Stack(T) = { List(T) items; };
+behavior Container(C, E) {
+    List(E) elems(C c);
+    Int count(C c);
+}
+List(T) stack_elems(Stack(T) s) { return s.items; }
+Int stack_count(Stack(T) s) { return s.items.len(); }
+Container(Stack(T), T) = { .elems = stack_elems, .count = stack_count };
+
+// E is fixed by C through the one instance
+@needs(Container(C, E), Show(E))
+Str describe(C c) { return f"{count(c)}:{elems(c)}"; }
+
+behavior Config(T) { T config(); }
+type Port = { Int n; };
+Port port80() { return Port {.n = 80}; }
+Config(Port) = port80;
+
+// T appears only in @needs: Config(Port) is the one instance
+@needs(Config(T), Show(T))
+Str current() { T c = config(); return f"{c}"; }
+
+Int main() {
+    Stack(Str) s = Stack {.items = ["a", "b"]};
+    println(describe(s));   //> 2:["a", "b"]
+    println(current());     //> Port { n: 80 }
+    return 0;
+}
+```
+
+A need that an instance covers for every choice of its types needs no
+`@needs` of its own: with `Enc(Int, F) = enc_int` (where `enc_int` needs
+`Sink(F)`), a function needing only `Sink(F)` may call `enc(3, s)`.
+
+An instance head may be generic in a width (`Encode(Int(N), F)`), and its
+function's needs decide which widths it carries: a call at a width whose
+need has no instance is E0226 naming that need, and a generic instance plus
+a specific one for a width it does not carry is not an overlap.
 
 ## Coherence
 
@@ -181,8 +335,10 @@ one verb call, `sort`, or generic call (the copy uses the override).
 - Levels: application > library > prelude. A higher-level instance
   replaces a lower one program-wide, library code included (`resid-why prog
   Show` shows "replaced by").
-- A library may declare instances only of its own behaviors or types
-  (E0224); the application may declare any.
+- A library (a manifest dependency, or the standard library) may declare
+  instances only of its own behaviors or types (E0224). The application may
+  declare any; files imported by path are part of the application, so
+  their instances replace the prelude's too.
 - A generic function's authority is its own `@requires` plus what its
   instances need; the concrete caller holds it (E0219 names the copy, e.g.
   "through `label(Task)`"). A generic declared in a `sandbox` keeps that
@@ -245,9 +401,10 @@ for full-range integers and for Floats.
 
 ## Built-in generic behaviors and verbs
 
-The numeric family gets `Eq`, `Ord` and `Hash` generically: every width has
-them without declarations, and the built-in instance may be named with a
-parenthesized type (`Ord(UInt(16))`). The list verbs and math helpers are generic in the same way.
+The numeric family gets `Eq` and `Ord` generically (and integers `Hash`):
+every width has them without declarations, and the built-in instance may be
+named with a parenthesized type (`Ord(UInt(16))`). The list verbs and math
+helpers are generic in the same way.
 
 ```resid
 Int main() {
@@ -267,8 +424,11 @@ Int main() {
 - `xs.contains(v)` needs integer (up to 64-bit), Float or Str elements;
   `xs.sum()` needs `List(Int)` or `List(Float)`.
 - `abs`/`min`/`max`/`clamp` accept any single numeric type except Dec.
-- A user function with the same name as a verb (`Int reverse(List(Int) xs)`)
-  takes precedence over the built-in method.
+  A bare `min(a, b)` is always the builtin, so a user type's ordering
+  uses `Ord`'s `a.least(b)` / `a.greatest(b)` instead.
+- `contains`, `reverse` and `sum` are list builtins, not behavior verbs: a
+  function of your own with that name, taking the list first, takes
+  precedence over the builtin (`xs.sum()` calls it).
 
 ### Ordering a sum type
 
@@ -279,7 +439,9 @@ type Level = Low | Mid | High;
 
 Int rank(Level l) { return match l { Low => 0, Mid => 1, High => 2 }; }
 Int by_rank(Level a, Level b) { return rank(a) - rank(b); }
-Ord(Level) = by_rank;
+Level lesser(Level a, Level b) { return if (by_rank(a, b) <= 0) { a } else { b }; }
+Level greater(Level a, Level b) { return if (by_rank(a, b) >= 0) { a } else { b }; }
+Ord(Level) = { .compare = by_rank, .least = lesser, .greatest = greater };
 
 Str show_level(Level l) { return match l { Low => "low", Mid => "mid", High => "high" }; }
 Show(Level) = show_level;
@@ -334,7 +496,7 @@ when the choice is known:
 | at compile time, per type | behavior instance | `Ord(Emp)` + `sort(xs)`, `Show(Money)` |
 | at compile time, per call | a named comparator/formatter function, or a default parameter | `fmt(x, width = 8)` |
 | at run time, open set | a closure value (strategy) | `Int closure(Int, Int) pick` in a record |
-| at run time, closed set | a sum type + `match` | `type Mode = Fast | Safe;` |
+| at run time, closed set | a sum type + `match` | `type Mode = Fast \| Safe;` |
 
 ### 1. Replace ad-hoc sort helpers with instances
 
@@ -405,7 +567,9 @@ type Celsius = { Float deg; };
 Int cmp_c(Celsius a, Celsius b) {
     return if (a.deg < b.deg) { -1 } else { if (a.deg > b.deg) { 1 } else { 0 } };
 }
-Ord(Celsius) = cmp_c;
+Celsius lesser(Celsius a, Celsius b) { return if (cmp_c(a, b) <= 0) { a } else { b }; }
+Celsius greater(Celsius a, Celsius b) { return if (cmp_c(a, b) >= 0) { a } else { b }; }
+Ord(Celsius) = { .compare = cmp_c, .least = lesser, .greatest = greater };
 
 Str show_c(Celsius c) { return f"{c.deg}°C"; }
 Show(Celsius) = show_c;

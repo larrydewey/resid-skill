@@ -10,16 +10,18 @@
 | `s += piece` in a loop | `StrBuf` parameter, or a pure `acc + piece` tail accumulator |
 | `const LIMIT = 10` | `Int limit() { return 10; }` |
 | `null` / `nil` | `Option(T)`: `None` / `Some(v)` |
+| `x ?? d`, `getOrElse(d)` | `opt else { d }` |
+| `if let Some(x) = opt` | `if (Some(x) = opt) { ... }` |
 | exceptions | `Result(T, E)` + `?`; aborts only for bugs |
 | `obj.field = v` | build a new record with every field |
-| `switch (n) { case 1: ... }` | `if` chains (match only takes variants) |
+| `switch (n) { case 1: ... }` | `if` chains (`match` patterns are variants or `_`) |
 | `s[i]` on a string | `str_char_at(s, i)` (a code point `Int`) |
 | `a == b` on records | declare `Eq(T) = eq_fn;` (then `==` calls it), or compare fields |
 | generics `fn f<T>(x: T)` | `T f(T x)`; bounds `T: Ord` become `@needs(Ord(T))` |
-| interface / trait | `behavior Name(T) { ... }` + an instance per type (no methods), a closure record, or a sum type |
-| `map(f, xs)` / `filter` | write `map_ints`/`filter_ints` once (see functions-and-closures.md) |
+| interface / trait | `behavior Name(T) { ... }` + an instance per type (a verb is a plain function, writable as `x.f(a)`), a closure record, or a sum type |
+| `map(f, xs)` / `filter` | write generic `map_all`/`keep_if` once (see functions-and-closures.md) |
 | global mutable state | pass state explicitly; return new state |
-| `printf("%5.2f")` | f-strings plus your own padding/rounding helpers; `Dec(N)` for fixed decimals |
+| `printf("%5.2f")` | `f"{x:precision 2, width 8}"`; a hole's spec is a list of flags in any order (see types-and-values.md) |
 | reading a file anywhere | read in `main` (with `@requires`), pass the text to pure code |
 
 ## Idioms
@@ -119,25 +121,59 @@ order.
   computes in `Int(64)`. Widen one operand.
 - **Constraint types as validation of user input**: a failing residual value
   aborts the process; validate with `if` and return a `Result` instead.
+- **`==` on records or sum types** without an `Eq(T)` instance: a type
+  error; an `Ord` instance does not supply it.
 - **Defining `Show` for builtin types** (`Show(Int)`): rejected (numbers,
   Bool and Str have a fixed display). Wrap in a record instead.
 - **Calling compiler internals** seen in `compiler/` or `runtime/rt/`
   (`resid_raw_*`, `resid_arena_*`, `resid_bulk_*`, `*_persist*`): E0220.
-- **Scientific float literals, `_` digit separators, `{{` in f-strings,
-  `try`, `orelse`, `unwrap()`, `x.first()`, `s[i]`**: none exist.
+- **Scientific float literals, `_` digit separators, `try`, `orelse`,
+  `unwrap()`, `x.first()`, `s[i]`**: none exist.
+- **`s.len()` on a `Str`**: use `str_len(s)` (see the known issues).
 
-## Known issues in the current compiler (commit 21dd7ab; work around them)
+## Known issues in the current compiler (commit 5060def; work around them)
 
 | Issue | Workaround |
 |---|---|
-| Unknown string escapes (`"\x1f"`) silently drop the backslash | use only `\n \t \r \" \\`; build control characters with `str_from_code(n)` |
-| `git` provider from the spec: `@requires(git)` accepted, `git.*` calls do not compile | `process.run("git ...")` (exit status only) |
+| `s.len()` on a `Str` compiles and returns garbage (the string's bytes read as a number) | `str_len(s)` |
+| A signed argument to an unsigned parameter passes silently: `Int(32)` `-5` given to a `UInt` parameter arrives as 18446744073709551611 | convert explicitly, and check the sign first |
+| A behavior of your own that declares a prelude verb's name (`behavior Mine(T) { Str show(T x); }`) compiles, but `show(x)` goes to the prelude's `Show`, with no diagnostic | give your verbs names the prelude does not use |
+| A function returning a constraint type (`type Positive = Int where value > 0;` `Positive mk(Int x)`): binding its result is "expected Positive, got Positive", and printing `f"{mk(rt(5))}"` crashes | return the base type (`Int mk(Int x)`) and bind it to a `Positive` at the call site |
+| `'\x41'` is refused as a character literal (`\x takes two hex digits`) | the code point as a number (`65`) |
+| `'\0'` inside an f-string hole is refused (a Str cannot hold NUL) | bind it first: `Int nul = '\0';` then `f"{nul}"` |
+| `wrapping_div(MIN, -1)`: with literal `Int` arguments it folds to 9223372036854775808 (out of range; at run time it is MIN); at `Int(8)` (`wrapping_div(i8(-128), i8(-1))`) the program dies with SIGFPE | test for a `-1` divisor and negate with `wrapping_sub(0, x)` |
+| `{d:precision 2}` on a `Dec` is accepted but ignored: all N digits print | round with `dN(...)` to fewer significant digits, or `{d:trim}` |
+| `checked_add`/`checked_sub`/`checked_mul` wrap (`checked_add(MAX, 1)` is MIN) | plain `+ - *`, which are checked and abort on overflow, or compare against `x.max()` first |
+| `min(x)`/`max(x)` for `Bounded` is refused ("expects (), got (Int(8))") although the spec allows it | `x.min()`, or `Int(8) lo = min();` |
+| An instance record naming a verb twice (`{ .surface = a, .perimeter = a, .surface = b }`) is accepted; the first entry wins | name each verb once |
+| `expect(x).toEqual(y)` on a List, Set, Map or record always passes (`toNotEqual` always fails) | compare `f"{x}"` text or the parts ([testing.md](testing.md)) |
+| `residc test` finds no `test` block that directly follows a record declaration | put a function (or the tests) between them |
+| `using = f` on a generic call reaches the copy's verb calls, operators and `sort`, but not its f-string holes: `f"{x}"` still uses the type's own `Show` | call `show(x)` in the generic body instead of a bare hole |
 
-Language limits (by design or not yet implemented; not bugs): no methods or
-run-time dispatch (behaviors resolve at compile time), no generic lambdas,
-flat match patterns only (no nested/literal/guard patterns), one
-payload per variant, no `s[i]` on `Str`, no global constants, no
-`try`/`orelse`/`unwrap`, no scientific float literals or `_` separators, no
-`{{` escape, `else { }` blocks cannot `return`, `Void` functions cannot
-`return;`, lambdas take untyped parameters, named functions are not values,
-`for` cannot iterate a `Set`/`Map` directly, maps iterate in hash order.
+```resid
+type Task = { Str name; };
+Str plain(Task t) { return "plain"; }
+Str fancy(Task t) { return "fancy"; }
+Show(Task) = plain;
+
+@needs(Show(T))
+Str by_verb(T x) { return "[" + show(x) + "]"; }
+@needs(Show(T))
+Str by_hole(T x) { return f"[{x}]"; }
+
+Int main() {
+    Task t = Task {.name = "a"};
+    println(f"{by_verb(t, using = fancy)} {by_hole(t, using = fancy)}");   //> [fancy] [plain]
+    return 0;
+}
+```
+
+Language limits (by design or not yet implemented; not bugs): no
+run-time dispatch (behaviors resolve at compile time, and a verb is a plain
+function that may be *written* as `x.f(a)`), no generic lambdas,
+flat match patterns only (a variant with one binding per payload, or `_`;
+no nested, literal or guard patterns), no `s[i]` on `Str`, no global
+constants, no `try`/`orelse`/`unwrap`, no scientific float literals or `_`
+separators, `Void` functions cannot `return;`, lambdas take untyped
+parameters, named functions are not values, `for` cannot iterate a
+`Set`/`Map` directly (iterate `m.keys()`), maps iterate in hash order.

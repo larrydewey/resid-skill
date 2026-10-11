@@ -12,8 +12,9 @@ loops that carry state are tail calls, errors are `Option`/`Result` values,
 and **no function touches the outside world without a declared capability**.
 
 This skill was verified against the self-hosted compiler (spec v3.6,
-Resid commit 79f9062). Every code block in it compiles; `scripts/check-examples.sh`
-re-checks them.
+Resid commit 219dcd9, 2026-10-11). Every code block in it compiles;
+`scripts/check-examples.sh` re-checks them. For security guarantees, the
+Resid repo's `SECURITY.md` is the source of truth (each row names its tests).
 
 ## Mental model
 
@@ -46,7 +47,7 @@ Int total(List(Item) xs, Int i, Int acc) {        // loop = tail recursion
 Int main() {
     List(Item) cart = [Item {.name = "tea", .cents = 350}, Item {.name = "cake", .cents = 425}];
     Int sum = total(cart, 0, 0);
-    println(f"{cart.len()} items, {sum / 100}.{sum % 100} total, argc={args.count()}");  //> 2 items, 7.75 total, argc=1
+    println(f"{cart.len()} items, {sum / 100}.{sum % 100:zero, width 2} total, argc={args.count()}");  //> 2 items, 7.75 total, argc=1
     return 0;                                     // exit code
 }
 ```
@@ -60,26 +61,42 @@ Int main() {
 - **Names have a case**: types, behaviors, variants start uppercase; values,
   functions, params, fields lowercase (E0222). One uppercase letter (`T`,
   `N`) is a type parameter, never a type name.
-- **No globals**: constants are zero-arg functions. No overloading, no
-  methods on types (but `x.f(a)` = `f(x, a)`).
+- **No globals**: constants are zero-arg functions. No overloading. A verb
+  is a method on its receiver (`x.f(a)` = `f(x, a)`), but a type does not
+  carry its own methods.
 - **Generics**: `T first(List(T) xs)`, `type Pair(T) = { T a; T b; };`,
   `Int(N)` for any width. A body that sorts/shows/compares a `T` declares
   `@needs(Ord(T))` etc. **Behaviors**: `behavior Area(T) { Float area(T s); }`,
-  `Area(Circle) = circle_area;`, call `area(c)`. See references/behaviors.md.
+  `Area(Circle) = circle_area;`, call `area(c)` or `c.area()`. A zero-arg
+  verb takes its type from the receiver: `x.max()` (Bounded). See
+  references/behaviors.md.
+- **A name is a verb or a function, never both** (E0231), program-wide:
+  don't define a function called `min`, `max`, `least`, `greatest`,
+  `show`, `hash`, `eq`, `compare`, `serialize` or `allocate`. Override a
+  behavior with an instance or `using =`, not a function. A multi-verb instance is a complete record:
+  `Ord(X) = { .compare = f, .least = g, .greatest = h };`.
 - `if` is an expression (`Int y = if (c) { 1 } else { 2 };`) and then needs
   its `else`. Branches must have identical types.
 - `match` only on sum types (`Option`, `Result`, yours); patterns are flat
   (`V(x)`, `V`, `_`), must be exhaustive. Use `if` chains for numbers/strings.
-- Sum variants carry at most one payload: `Rect(Dims)`, not `Rect(Float, Float)`.
+- Sum variants take any number of payloads: `type Shape = Rect(Float, Float) | Dot;`,
+  built `Rect(2.0, 3.0)`, matched `Rect(w, h) =>` (one name per payload).
 - `for` needs the element type: `for (Int i in 0..n)`, `for (Str s in xs)`.
   Sets/maps: iterate `s.to_list()` / `m.keys()`.
 - Every numeric width is a distinct type; **no implicit narrowing**, no
   signed/unsigned mixing; `+ - * / %` are **checked** (overflow aborts).
   Widen before multiplying: `(Int(128))a * b`. Use `wrapping_*`/`saturating_*`
-  when wrap/clamp is intended.
-- Strings: `+`, `==`, f-strings `f"{any_value}"`; no `s[i]` (use
-  `str_char_at`), `<` on `Str` works (Ord(Str)), no `{{` escape, no
-  scientific float literals.
+  when wrap/clamp is intended. Avoid `checked_*` (they wrap) and convert
+  signed to unsigned explicitly (an `Int` argument to a `UInt` parameter
+  wraps silently).
+- Strings: `+`, `==`, f-strings `f"{any_value}"`; length is `str_len(s)`
+  (`s.len()` compiles but returns garbage: a compiler bug); no `s[i]` (use
+  `str_char_at`), `<` on `Str` works (Ord(Str)), no scientific float
+  literals. A hole takes a format spec after `:`, a list of flags **in any
+  order**: `{n:8}` (width), `{n:width 8, left}`, `{n:zero, width 6}`,
+  `{n:group, hex}`, `{f:precision 2}`, `{s:fill '.', center}`, `{d:trim}`.
+  `{{` / `}}` are a literal brace. A flag the value's type cannot mean is a
+  compile error, so a typo never reads as "it didn't apply".
 - `==` works on numbers, Bool and `Str`, and on types with an `Eq` instance
   (`<` with `Ord`); compare other records/lists by parts.
 - Lambdas take their type from context (typed binding, parameter, return
@@ -98,18 +115,26 @@ Int main() {
 
 ## Gotchas checklist (review before compiling)
 
-- [ ] Every function using `filesystem`/`environment`/`args`/`process`/TCP,
+- [ ] Every function using `filesystem`/`environment`/`args`/`process`/
+      `network`/`clock`/`terminal`/`display`/`device`/a `@link` native module,
       *or calling one that does*, has `@requires(...)`; `main` covers all.
 - [ ] Writes are not under a `readonly` grant.
 - [ ] No name bound twice on a nesting path (parameters included).
 - [ ] Every sum type in a `match` has an arm or `_`; no literal patterns.
-- [ ] `?` only inside functions returning Option/Result.
+- [ ] `?` only inside functions returning Option/Result, and of the same
+      kind (an `Option` inside an `Option` function, a `Result` with the
+      same error type inside a `Result` one): a mismatch is not caught.
 - [ ] Literal-only arithmetic that needs >64 bits has a widened operand.
 - [ ] Loops accumulate via tail calls with builders; no prepending in loops.
 - [ ] Map output that must be ordered goes through `sort(m.keys())`.
 - [ ] One `Ord(T)` per type (then `sort(xs)` and `<` work); other orders via
-      `sort(xs, using = cmp)` or `using = Reverse(Ord(T))`.
+      `sort(xs, using = cmp)` or `using = Reverse(Ord(T))`. It is a record
+      naming all three verbs: `{ .compare = f, .least = g, .greatest = h }`;
+      a bare function is rejected.
+- [ ] No function reuses a behavior verb's name (E0231).
 - [ ] Generic bodies list what they sort/show/compare in `@needs(...)`.
+- [ ] Tests compare lists, maps, sets and records by parts: `toEqual` on
+      them always passes (compiler bug, see references/testing.md).
 
 ## Workflow
 
@@ -125,8 +150,8 @@ Int main() {
 4. **Read errors**: `error[E0001]: type error: <message>` with a caret; the
    message says what to change ([references/error-codes.md](references/error-codes.md)).
    `residc test prog.resid` runs its `test "..." { }` blocks. A clang/LLVM
-   error about the generated `.ll` means a construct the compiler mishandles;
-   see the known-issues table in
+   error about the generated `.ll`, or a result that contradicts these rules,
+   may be a compiler bug; see the known-issues table in
    [references/idioms-and-antipatterns.md](references/idioms-and-antipatterns.md).
 5. **Runtime abort** (exit 134, `resid: abort: ...` on stderr): overflow,
    index, conversion, assert, `todo`. Use `rt` to reproduce runtime paths;
@@ -147,13 +172,16 @@ Int main() {
 | [references/capabilities-and-security.md](references/capabilities-and-security.md) | @requires, provider verbs, sandbox, spawn, handles, E0219/E0220 |
 | [references/testing.md](references/testing.md) | test blocks, lib/testing.resid, matchers, golden tests |
 | [references/stdlib.md](references/stdlib.md) | builtin functions, missing math, lib/ modules |
+| [references/secrets.md](references/secrets.md) | `Secret(T)`, `declassify`, constant-time rules, secret crypto/TLS APIs |
+| [references/devices-and-attestation.md](references/devices-and-attestation.md) | the `device` provider and `lib/dev/`, integrity labels (E0270, E0286, E0291), attestation: `lib/verify/`, `@anchor`, `@policy`, `@decides`, CoRIM, SPDM sessions |
 | [references/performance-and-memory.md](references/performance-and-memory.md) | builders, in-place updates, quadratic traps, memory |
 | [references/compile-time-reduction.md](references/compile-time-reduction.md) | what folds, rt/known/comptime_print, specialization, notes |
 | [references/tooling.md](references/tooling.md) | compiler flags/profiles/env, resid-fmt/why/graph/debug, packages |
 | [references/error-codes.md](references/error-codes.md) | every E-code, common messages, post-check failures |
 | [references/idioms-and-antipatterns.md](references/idioms-and-antipatterns.md) | translating habits, idioms, anti-patterns, **known compiler issues** |
 
-`examples/` holds 21 complete programs with their exact expected output
+`examples/` holds 25 complete programs with their exact expected output
 (`NAME.out`): hello, fizzbuzz, word count, shapes, results, behaviors,
 closures, files, numbers, fixed capacity, spawn, sandbox, reduction, testing,
-args/env, tokenizer, BFS, crypto, records, stdin filter, readline REPL.
+args/env, tokenizer, BFS, crypto, records, stdin filter, readline REPL,
+HTTP server and client, generics, user-defined behaviors, regex.

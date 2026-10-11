@@ -19,9 +19,10 @@ Int main() {
 - Parameters are immutable bindings; they may not be shadowed in the body.
 - Defaults must be compile-time expressions; named arguments use `name = v`.
 - Every path of a non-Void function must `return` a value.
-- Argument types must match exactly after literal adoption (value-preserving
-  integer widening of a variable is accepted; computed expressions of the
-  wrong width are not). Convert explicitly when in doubt: `f(i32(x))`.
+- Argument types must match after literal adoption, except that a narrower
+  integer argument widens to a wider parameter (`Int(32)` into `Int`); a
+  wider one is an error (`call f expects (Int(32)), got (Int)`). Convert
+  explicitly when widths or signedness differ: `f(i32(x))`, `g(u64(x))`.
 - One function per name: no overloading. For the same logic over several
   types, write one generic function (`T last(List(T) xs)`, with `@needs` for
   what it sorts, shows or compares; see [behaviors.md](behaviors.md)), or
@@ -48,7 +49,9 @@ A closure type is written `Ret closure(Arg1, Arg2)`; `Ret` may be any type,
 including a constructed one (`List(Str) closure(Str)`). A lambda is
 `lambda(a, b) { statements; final_expression }`: parameters are untyped (the
 expected closure type supplies them) and the last expression, without `;`, is
-the result. Lambdas capture the variables they mention.
+the result. A lambda body cannot `return`; branch with `if`/`match`
+expressions instead. Lambdas capture the variables they mention. A
+zero-argument closure is `Ret closure()`, built with `lambda() { ... }`.
 
 ```resid
 Int apply_twice(Int closure(Int) f, Int x) { return f(f(x)); }
@@ -68,8 +71,10 @@ Int main() {
 ```
 
 A lambda gets its type from where it is used: a typed binding, a parameter,
-a return type, or a record field. Lambdas capture variables, including other
-closures and records, and may contain list literals.
+a return type, a record field, or a generic parameter fixed by the other
+arguments. Lambdas capture variables, including other closures and records,
+and may contain list literals. A call through a closure with known arguments
+is evaluated at compile time like any other call.
 
 Rules that bite:
 
@@ -118,51 +123,53 @@ Int main() {
 ## Higher-order helpers you write yourself
 
 There is no builtin `map`/`filter`/`fold`/`any`. These are the standard
-shapes (monomorphic: one per element type you need):
+shapes, written once as generic functions (a single uppercase letter is a
+type parameter; each call gets a copy for its types):
 
 ```resid
-List(Int) map_ints(List(Int) xs, Int closure(Int) f, Int i, ListBuf(Int) out) {
+List(U) map_all(List(T) xs, U closure(T) f, Int i, ListBuf(U) out) {
     if (i >= xs.len()) { return out.finish(); }
-    return map_ints(xs, f, i + 1, out.push(f(xs[i])));
+    return map_all(xs, f, i + 1, out.push(f(xs[i])));
 }
 
-List(Int) filter_ints(List(Int) xs, Bool closure(Int) keep, Int i, ListBuf(Int) out) {
+List(T) keep_if(List(T) xs, Bool closure(T) keep, Int i, ListBuf(T) out) {
     if (i >= xs.len()) { return out.finish(); }
-    if (keep(xs[i])) { return filter_ints(xs, keep, i + 1, out.push(xs[i])); }
-    return filter_ints(xs, keep, i + 1, out);
+    if (keep(xs[i])) { return keep_if(xs, keep, i + 1, out.push(xs[i])); }
+    return keep_if(xs, keep, i + 1, out);
 }
 
-Int fold_ints(List(Int) xs, Int closure(Int, Int) f, Int i, Int acc) {
+A fold_all(List(T) xs, A acc, A closure(A, T) f, Int i) {
     if (i >= xs.len()) { return acc; }
-    return fold_ints(xs, f, i + 1, f(acc, xs[i]));
+    return fold_all(xs, f(acc, xs[i]), f, i + 1);
 }
 
-Bool any_ints(List(Int) xs, Bool closure(Int) p, Int i) {
+Bool any_of(List(T) xs, Bool closure(T) p, Int i) {
     if (i >= xs.len()) { return false; }
-    return p(xs[i]) || any_ints(xs, p, i + 1);
+    return p(xs[i]) || any_of(xs, p, i + 1);
 }
 
-// Strings: map each element to text and join.
-Str join_ints(List(Int) xs, Str sep, Int i, StrBuf out) {
+// Strings: join with a StrBuf.
+Str join_strs(List(Str) xs, Str sep, Int i, StrBuf out) {
     if (i >= xs.len()) { return out.finish(); }
     Str s = if (i == 0) { "" } else { sep };
-    return join_ints(xs, sep, i + 1, out.push(s).push(f"{xs[i]}"));
+    return join_strs(xs, sep, i + 1, out.push(s).push(xs[i]));
 }
 
 Int main() {
     List(Int) xs = [1, 2, 3, 4, 5];
-    List(Int) sq = map_ints(xs, lambda(x) { x * x }, 0, ListBuf());
-    List(Int) odd = filter_ints(sq, lambda(x) { x % 2 == 1 }, 0, ListBuf());
-    Int total = fold_ints(odd, lambda(a, b) { a + b }, 0, 0);
-    println(join_ints(odd, "+", 0, StrBuf()) + f" = {total}");   //> 1+9+25 = 35
-    println(f"{any_ints(xs, lambda(x) { x > 4 }, 0)}");          //> true
+    List(Int) sq = map_all(xs, lambda(x) { x * x }, 0, ListBuf());
+    List(Int) odd = keep_if(sq, lambda(x) { x % 2 == 1 }, 0, ListBuf());
+    Int total = fold_all(odd, 0, lambda(a, b) { a + b }, 0);
+    List(Str) words = map_all(odd, lambda(x) { f"{x}" }, 0, ListBuf());
+    println(join_strs(words, "+", 0, StrBuf()) + f" = {total}");   //> 1+9+25 = 35
+    println(f"{any_of(xs, lambda(x) { x > 4 }, 0)}");            //> true
     return 0;
 }
 ```
 
-For a different element type, copy the helper with the types changed
-(`map_strs(List(Str) xs, Str closure(Str) f, ...)`). This is normal Resid:
-functions are monomorphic.
+The lambda's parameter types come from the other arguments (`T` from `xs`,
+`A` from the seed). A body that compares, sorts or prints a `T` itself needs
+`@needs(...)` ([behaviors.md](behaviors.md)).
 
 ## Recursion patterns
 

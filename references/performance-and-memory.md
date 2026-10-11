@@ -114,11 +114,11 @@ accumulator is read in any other way:
 
 | Shape | Cost for n steps (measured) |
 |---|---|
-| `return loop(i + 1, acc + "x");` | linear: 1,000,000 steps in 3 ms |
-| `if (str_len(acc) >= n) ...` then `acc + "x"` (acc read elsewhere) | quadratic: 80,000 steps 0.93 s |
-| `return loop(i + 1, "x" + acc);` (prepend) | quadratic: 80,000 steps 0.77 s |
-| `return "x" + rec(i + 1);` (non-tail) | quadratic: 80,000 steps 0.79 s |
-| `StrBuf` push | linear: 1,000,000 steps in 4 ms |
+| `return loop(i + 1, acc + "x");` | linear: 1,000,000 steps in 4 ms |
+| `if (str_len(acc) >= n) ...` then `acc + "x"` (acc read elsewhere) | quadratic: 80,000 steps 0.41 s, 160,000 steps 2.6 s |
+| `return loop(i + 1, "x" + acc);` (prepend) | quadratic: 80,000 steps 0.27 s, 160,000 steps 1.7 s |
+| `return "x" + rec(i + 1);` (non-tail) | quadratic: 80,000 steps 0.27 s, 160,000 steps 1.7 s |
+| `StrBuf` push | linear: 1,000,000 steps in 5 ms |
 
 Rule: in a loop, build text with `StrBuf` (or the pure `acc + piece`
 accumulator). Never prepend in a loop; build forward and reverse, or collect
@@ -127,7 +127,7 @@ pieces in a `ListBuf(Str)` and `str_join`.
 ## Lists without ListBuf
 
 `return loop(i + 1, acc.concat([x]));` is amortized O(1) per append in a tail
-loop (1,000,000 appends in about 22 ms vs 4 ms with `ListBuf`). Indexing
+loop (1,000,000 appends in about 12 ms vs 3 ms with `ListBuf`). Indexing
 `xs[i]` is fast; the compiler drops the bounds check when it can prove
 `0 <= i < xs.len()` (for example inside `for (Int i in 0..xs.len())` or
 after `if (i < xs.len())` with `i >= 0`).
@@ -195,23 +195,44 @@ garbage when what it carries is scalars, Map/Set of scalars or strings, or
 lists. Long-running loops should carry their state in those forms; state
 kept in other shapes can grow for the life of the loop.
 
-`RESID_MEM_LIMIT=<MB>` sets a memory budget: exceeding it aborts with
-`memory budget exceeded`. User programs have no budget by default.
+`RESID_MEM_LIMIT=<MB>` sets a heap budget for a program: exceeding it
+aborts (exit 134) with `memory budget exceeded (N MB); set RESID_MEM_LIMIT
+(MB) to raise it`. User programs have no budget by default; the compiler
+sets itself 4096 MB.
+
+`main` runs on a thread with a 1 GiB stack (`RESID_STACK_MB=<MB>`, 8 to
+1048576, overrides it). Tail calls do not use stack; deep non-tail
+recursion does, and running past the stack ends the process with SIGSEGV
+(exit 139), not a Resid abort.
 
 ## Numeric performance
 
 - Checked arithmetic costs a branch; the compiler removes checks it can
   prove unnecessary from ranges (`i` in `0..n`, `x != 0` before `/ x`).
   `wrapping_*` removes the check where wrap-around is intended.
-- `Int` and `Float` are unboxed in locals and immediates in collections.
-  Wide integers (`Int(256)`, `Int(512)`) are native LLVM integers but slow.
+- `Int` and `Float` locals live in registers. In collections an `Int` in
+  [-2^54, 2^54) and nearly every `Float` are immediate words; larger
+  integers are boxed. Wide integers (`Int(256)`, `Int(512)`) are native
+  LLVM integers but slow.
 - Compile-time reduction removes whole computations over known data
   ([compile-time-reduction.md](compile-time-reduction.md)).
-- Build optimized binaries with `-O2`/`-O3` (release profile, needs a
-  signing key); debug profile compiles at `-O0`.
+- The release profile builds at `-O2` and links the program and the
+  runtime as one LTO unit, so hot runtime helpers inline into user loops;
+  `-O3` and `-march=native` (any `-march=CPU`) are passed to clang. The
+  debug profile builds at `-O0` (`--profile debug -O2` overrides). Release
+  builds need a signing key ([tooling.md](tooling.md)).
 
 ## Things that do not exist
 
-No SIMD types, no raw intrinsics, no FFI, no mutable arrays, no manual
-allocation, no arenas for user code (`resid_arena_*` etc. are compiler-only,
-E0220). Structured `spawn` exists but do not plan on parallel speedups.
+No mutable arrays, no manual allocation, no arenas for user
+code (`resid_arena_*` etc. are compiler-only, E0220). SIMD is the
+`Vec(T, N)` type ([types-and-values.md](types-and-values.md)); the only
+other CPU intrinsics are the crypto builtins the standard library uses (`aesni_*`,
+`gf128_mul_hw`, `sha256_compress_hw`, `sha512_compress_hw`, gated by
+`resid_cpu_has_aesni()`/`_clmul()`/`_sha256()`/`_sha512()`); call
+`lib/crypto.resid` and `lib/aesgcm.resid` instead. C code enters only as a
+native module (`@link`, about 2 ms per call in a sandboxed process; see
+[capabilities-and-security.md](capabilities-and-security.md)), so it is
+not a speed tool. `spawn` runs its body on its own thread and the parent
+continues until it reads the result, so independent spawns run in parallel
+(four CPU-bound spawns measured about 3x faster than in sequence).

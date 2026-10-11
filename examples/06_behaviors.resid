@@ -1,11 +1,14 @@
 // Behaviors: `Name(Type) = impl;` binds compile-time knowledge to a type.
-// Ord(T) is a (T, T) -> Int comparator used by sort; Reverse(...) flips it.
+// Ord(T) names compare, least and greatest; sort uses compare, and
+// Reverse(...) flips the order.
 // Show(T) = (T) -> Str is used by f-string holes (also inside lists).
 // Other orders: a comparator closure and a small merge sort.
 type Employee = { Str name; Int age; Int salary; };
 
 Int by_age(Employee a, Employee b) { return a.age - b.age; }
-Ord(Employee) = by_age;
+Employee younger(Employee a, Employee b) { return if (a.age <= b.age) { a } else { b }; }
+Employee older(Employee a, Employee b) { return if (a.age >= b.age) { a } else { b }; }
+Ord(Employee) = { .compare = by_age, .least = younger, .greatest = older };
 
 Str show_emp(Employee e) { return f"{e.name}/{e.age}/{e.salary}"; }
 Show(Employee) = show_emp;

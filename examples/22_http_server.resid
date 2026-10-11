@@ -1,0 +1,42 @@
+// An HTTP server and its client in one program: one worker region serves
+// two connections on a loopback listener; main is the client.
+import "httpserv.resid";
+
+HttpReply handle(HttpRequest r) {
+    Map(Str, Str) none = {};
+    Map(Str, Str) m = http_route("/add/:a/:b", r.path) else { none };
+    if (m.len() == 2) {
+        Int a = str_parse_int(m.get("a") else { "0" });
+        Int b = str_parse_int(m.get("b") else { "0" });
+        return http_reply_text(200, "text/plain", f"{a + b}");
+    }
+    if (r.method == "POST" && r.path == "/upper") {
+        return http_reply_text(200, "text/plain", str_to_upper(http_body_text(r)));
+    }
+    return http_reply_status(404);
+}
+
+// Status and body of one request on a fresh connection.
+@requires(network(readonly))
+Str ask(Int port, Str req) {
+    Int fd = resid_tcp_connect("127.0.0.1", port);
+    _ = resid_tcp_send(fd, req);
+    Str raw = resid_tcp_recv_all(fd);
+    _ = resid_tcp_close(fd);
+    Int at = str_index_of(raw, "\r\n\r\n", 0);
+    return str_slice(raw, 9, 12) + " " + str_slice(raw, at + 4, str_len(raw));
+}
+
+@requires(network(readonly))
+Int main() {
+    Int lfd = http_listen(0);
+    Int port = http_bound_port(lfd);
+    Result(Int, RegionError) worker = spawn (network(readonly)) {
+        return http_accept_loop(lfd, lambda(r) { handle(r) }, http_limits(), 2);
+    };
+    println(ask(port, "GET /add/2/40 HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"));
+    println(ask(port, "POST /upper HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\nConnection: close\r\n\r\nresid"));
+    Int served = worker else { -1 };
+    println(f"served {served}");
+    return 0;
+}

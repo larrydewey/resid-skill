@@ -28,7 +28,7 @@ references/
   error-codes.md            E-codes, common messages, post-check failures
   idioms-and-antipatterns.md  idioms, anti-patterns, known compiler issues
 examples/NN_name.resid      complete programs; NN_name.out = exact stdout
-                            (optional .args, .env, .exit)
+                            (optional .args, .env, .exit, .stdin)
 scripts/check-examples.sh   verifies examples and snippets
 ```
 

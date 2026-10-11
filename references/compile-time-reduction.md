@@ -44,20 +44,39 @@ for this one `main` becomes (abridged):
 
 ```text
 @requires(args) Int main() {
+Int f = 6765;
 Int n = args.count();
-Int c = pow__rs1(n + 1);
+Int c = pow__rs1(n + 1, 3);
 println(f"6765 {c}");
 return 0;
 }
-Int pow__rs1(Int b) { return ((b * pow__rs2(b))); }   // e = 3, 2, 1, 0 specialized
+Int pow__rs1(Int b, Int rs#known1) {
+return ((b * pow__rs2(b, 2)));
+}
+// pow__rs2, pow__rs3, then pow__rs4 returns 1: e = 3, 2, 1, 0 specialized
 ```
 
-Reduction covers: constant folding, beta reduction (inlining known calls),
-evaluation of fully known calls, specialization on partly known arguments
-(known record fields count), dead-branch elimination (`if (false)`, known
-`match` scrutinees), short-circuit folding, string interpolation of known
-parts, dead-binding elision, and check discharge from facts (a bounds or
-overflow check that provably cannot fire is dropped).
+A known binding stays in the dump with its value (`Int f = 6765;`) and its
+uses are replaced by that value. Unused source functions (`fib`) are also
+printed; they cost nothing at run time.
+
+Reduction covers: constant folding, inlining and evaluation of calls with
+known arguments, specialization on partly known arguments (known record
+fields count), dead-branch elimination (`if (false)`, known `match`
+scrutinees), short-circuit folding, string interpolation of known parts,
+strings and the string builtins, lists, `Map`/`Set`, records, sum types
+(generic ones too), `Result`/`Option`, closures (`lambda`), `StrBuf` and
+`ListBuf`, and integers up to 2^1023 in magnitude. Lowering then drops
+bounds and overflow checks that range facts prove cannot fire
+(`--no-facts` keeps them).
+
+What stays residual by design: effects, provider calls, `rt` values,
+integers of 2^1023 or more, `Float(16)`/`Float(32)`/`Float(128)`, `Dec`
+(a function whose body binds a `Dec` is not reduced at all, and no note
+says so; keep decimal arithmetic in small functions of its own), a
+`while` whose body falls through, and the legacy `str_sb_*` builder
+functions. A plain `Float` result is computed but its formatting in an
+f-string hole is left to run time.
 
 ## Rules that keep reduction sound
 
@@ -66,10 +85,11 @@ overflow check that provably cannot fire is dropped).
   Only fully known, effect-free bindings are elided.
 - **Overflow is never folded.** A known `Int(8) 100 + 100` is left residual
   and aborts at run time, exactly as the unreduced program would.
-- **Budgets are deterministic** (steps, depth, specializations; never time).
-  Past a budget the call is simply left residual: `count(5000)` of a
-  non-tail recursion may fold while `count(100000)` runs at run time. A pure
-  call that re-enters itself with identical arguments is left residual.
+- **Budgets are deterministic**: they count work (steps, calls, value
+  sizes, nesting, specializations), never time or native memory, so every
+  build reduces a program the same way. Past a budget the call is simply
+  left residual and runs at run time; behavior is identical either way. A
+  call that keeps re-entering itself without progress is left residual too.
 - Authority is part of knowledge: a provider result is not folded in unless
   the capability grants it at build time (the current compiler treats
   provider calls as residual).
@@ -84,6 +104,57 @@ Int main() {
 }
 ```
 
+## Budgets
+
+| Budget | Default | Raise it with |
+|---|---|---|
+| fuel: evaluation steps over the whole program | 16,000,000 | `--reduce-budget N` or `--reduce-budget unbounded`; `[reduce] budget = "N"` in `resid.toml` |
+| steps: one top-level call's attempt | 65,536, doubled on each retry up to 1/8 of the fuel left | `@reduce(steps = N)` or `@reduce(steps = unbounded)` on the function (its own allowance, outside the fuel) |
+| memory meter (abstract bytes per attempt) | a quarter of the compiler's memory budget (`RESID_MEM_LIMIT`, 4096 MB); half under `unbounded` | `RESID_MEM_LIMIT=<MB>` |
+| depth: non-tail call nesting | 100,000 (none under `unbounded`) | `--reduce-budget unbounded` |
+| specializations | 400 per program, 8 per function | not adjustable |
+
+Tail calls and loops are evaluated iteratively, so a long tail loop
+spends steps, not depth. A budget that runs out prints a note and leaves
+the call residual:
+
+```text
+note: reduce: reduction budget (steps) exhausted evaluating sumto(...); the call stays residual
+```
+
+`@fold` turns "should fold" into a requirement: every call of the
+function must reduce at compile time, with no step limit, or the build
+fails with E0903 (calls from inside another `@fold` function are exempt).
+A malformed `@reduce` is E0904. If evaluation would overflow the
+compiler's own stack the build fails with E0902 (raise `RESID_STACK_MB`)
+rather than silently leaving the call residual. A non-default budget is
+recorded in the release provenance (`reduce` key).
+
+```resid
+@reduce(steps = unbounded)
+Int sumto(Int i, Int n, Int acc) { return if (i > n) { acc } else { sumto(i + 1, n, acc + i) }; }
+
+@fold
+Int sq(Int x) { return x * x; }
+
+Int main() {
+    println(f"{sumto(0, 3000000, 0)} {sq(12)}");   //> 4500001500000 144
+    return 0;
+}
+```
+
+```resid
+//! compile-error: E0903
+@fold
+Int sq(Int x) { return x * x; }
+
+@requires(args)
+Int main() {
+    println(f"{sq(args.count())}");   // argument not known at compile time
+    return 0;
+}
+```
+
 ## Controlling knowledge
 
 | Form | Effect |
@@ -92,7 +163,7 @@ Int main() {
 | `@residual Type x = expr;` | same, as a binding annotation |
 | `known(x);` | compile error `E0901` unless `x` is KNOWN |
 | `rt_known(x);` | the run-time counterpart (accepted; no effect on a residual value) |
-| `comptime_print(x);` | the compiler prints the reduced value; removed from the binary |
+| `comptime_print(x);` | the compiler prints `[comptime_print] <value>` (`<residual>` when not known); removed from the binary |
 | `assert(c, msg)` / `rt_assert(c, msg)` | run-time checks (a known-false `assert` still aborts at run time) |
 
 ```resid
@@ -135,24 +206,29 @@ Int main() {
 
 ## Seeing what happened
 
-- Compiler notes: `note: notes: N residual note(s) recorded`, and reduce
-  budget notes (`note: reduce: ...`) when a budget left work residual.
+- Compiler notes: `note: notes: N residual note(s) recorded`, and
+  `note: reduce: ...` when a budget left work residual.
 - `--dump-reduced FILE`: the residual program as source.
 - `--no-reduce`: build without reduction (for comparing behavior).
-- Debug/check builds write `<out>.resid-graph.cbor` (the knowledge graph:
-  every node's state, value, facts, derive edges with rules like `fold`,
-  `beta`, `eval`, `specialize`, `select`, and the reason a node stayed
-  residual) and `<out>.resid-notes.cbor` (actionable notes: `rt-binding`,
-  `provider-call`, budget, loop, whistle).
-- `resid-why <binary>` explains the notes; `resid-why <binary> SYMBOL`,
+- Every build writes `<out>.resid-notes.cbor` (actionable notes, kinds
+  `rt-binding`, `provider-call`, `budget`, `loop`, `whistle`). Debug and
+  check builds also write `<out>.resid-graph.cbor`: every node's state,
+  value, facts, derive edges (`fold`, `beta`, `eval`, `specialize`,
+  `select`, `interpolate`, `known`, `rebuild`) and the reason a node stayed
+  residual.
+- `resid-why <out>` explains the notes; `resid-why <out> SYMBOL`,
   `--node ID` or `--at FILE:LINE` walk the graph; `resid-debug` shows folded
   values next to live variables. See [tooling.md](tooling.md).
 
-Example `resid-why` output for the program above:
+`resid-why prog` for the program above:
 
 ```text
-args.count(); @ prog.resid:8:13:
-    provider-call
-    -> queries an external provider (filesystem/env/git/...); grant the capability
-       at build time with a concrete value to discharge it
+residual notes for prog (1 of 1):
+
+prog.resid
+8:13  args.count();  [provider-call]
+    queries an external provider (filesystem/env/git/...); grant the capability at build time with a concrete value to discharge it
 ```
+
+A `budget` note names the ways to raise the budget (`--reduce-budget`,
+`[reduce] budget`, `@reduce(steps = N)`, `@fold`).
