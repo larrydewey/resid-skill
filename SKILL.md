@@ -12,7 +12,7 @@ loops that carry state are tail calls, errors are `Option`/`Result` values,
 and **no function touches the outside world without a declared capability**.
 
 This skill was verified against the self-hosted compiler (spec v3.6,
-Resid commit 219dcd9, 2026-10-11). Every code block in it compiles;
+Resid commit 78d041e, v0.3.0, 2026-10-12). Every code block in it compiles;
 `scripts/check-examples.sh` re-checks them. For security guarantees, the
 Resid repo's `SECURITY.md` is the source of truth (each row names its tests).
 

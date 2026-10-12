@@ -35,8 +35,17 @@ Int main() {
   outputs; never `Bytes`.
 - Modules: `dev/sev_guest`, `sev_guest_ext`, `sev_guest_key`,
   `tdx_guest`, `nsm`, `tsm_report` (configfs: SNP, TDX, CCA), `tpm`
-  (`/dev/tpmrm0`), `tpm_wire` (pure TPM 2.0 encoders and decoders, no
-  grant), `pci_tsm`.
+  (`/dev/tpmrm0`: reads, quotes, and for credential activation
+  `tpm_ek_cert(ecc)`, `tpm_ek_chain_certs()`, `tpm_ek_ak(ecc)`,
+  `tpm_activate_credential(ecc, blob, secret)`, `tpm_quote_ak`), `tpm_wire`
+  (pure TPM 2.0 encoders and decoders, no grant), `pci_tsm` (the platform
+  TSM, and a PCI function's attributes by `PciAddr {.domain, .bus,
+  .device, .function}`: `pci_vendor`, `pci_class`, `pci_authenticated`,
+  `pci_tsm_connected`, `pci_doe_spdm`; `pci_addr_parse("0000:3b:00.1")`).
+- Verbs a module is written over: `device.ioctl`, `transact`,
+  `transact_chain` (several commands on one open file, handles linked
+  between them), `configfs_report`, `read_attr`, `read_pci_attr`,
+  `sequence`.
 - A dependency is bounded by `devices = [...]` in its manifest entry
   (E0261). Each call runs in a fresh, seccomp-confined host process.
 
@@ -86,16 +95,32 @@ Result(HpkeMessage, VerifyError) release(List(UInt(8)) report, ChallengeRecord c
 }
 ```
 
-- **Challenges**: `challenge_issue(n)` (32 bytes for SPDM and TPM quotes,
+- **Challenges**: `challenge_issue(n)` (32 bytes for SPDM, TPM quotes and TPM credentials,
   64 for CCA, at most 64 for the others); `challenge_with_key(value, kem, sk)` binds the attester's
   HPKE key into the value, `challenge_with_channel` a TLS exporter.
 - **Verifiers** (each with `_key_bound`, `_channel_bound` where the
   platform allows, and `_replayable` forms): `snp_verify`,
   `tdx_verify_quote`, `nsm_verify`, `cca_verify`, `tpm_verify_quote`,
-  `spdm_verify` (NVIDIA GPU measurements), `spdm_session_verify` (an SPDM
-  1.1 key exchange), `corim_verify` (signed reference values and
-  attestation keys). Each returns `Verified(T)`, which only `lib/verify/`
-  can build (E0276).
+  `spdm_verify(rec, c, root, t)` (SPDM 1.0-1.3 measurements, an
+  `SpdmRecord` of the negotiation, certificates leaf first, OCSP answers
+  and the signed exchange), `spdm_verify_challenge`, `spdm_session_verify`
+  (a 1.1-1.3 key exchange), `corim_verify` (signed reference values,
+  endorsements and keys). Each returns `Verified(T)`, which only
+  `lib/verify/` can build (E0276).
+- **TPM AKs by credential activation**: `tpm_ak_challenge(ek_cert,
+  ak_public, c)` makes the credential, the attester's
+  `tpm_activate_credential` answers it, `tpm_verify_ak(ek_chain, crls,
+  ak_public, activated, c, root, t)` checks it under a manufacturer's EK
+  root (kind `TpmEk`; `verify/tpm_anchors.resid` has 46, e.g.
+  `tpm_ek_infineon_optiga_tm_ecc_root_ca()`), giving `Verified(TpmAk)`;
+  then `tpm_verify_quote_activated(attest, sig, pcrs, c2, ak, t)`.
+- **SPDM requester** (`lib/spdm_requester.resid`): `spdm_connect(io,
+  cfg)`, `spdm_get_digests`, `spdm_get_certificate`, `spdm_challenge`,
+  `spdm_get_measurements`, `spdm_start_session`, `spdm_start_psk_session`,
+  `spdm_heartbeat`, `spdm_key_update`, `spdm_end_session`, over an
+  `SpdmIo` transport closure (`lib/spdm_transport.resid`: MCTP, PCI DOE,
+  TCP framing; `spdm_emu_connect` for DMTF's emulator). Each step returns
+  the bytes a verifier's record needs.
 - **Anchors** are nullary `@anchor(kind = ..., fingerprint = ...,
   formats = [...], algorithms = [...], expires = ...)` functions returning
   `anchor_der(bytes)`; the standard ones are generated
@@ -110,13 +135,19 @@ Result(HpkeMessage, VerifyError) release(List(UInt(8)) report, ChallengeRecord c
   channel-bound one through `seal_to_channel` (E0287); no gate inside a
   loop (E0288).
 - **Endorsements**: `corim_verify(corim, endorser, t)` under an
-  `Endorser` anchor. Its reference values feed `*_appraise_endorsed`; its
-  attest-key triples replace a pinned key in `cca_verify_endorsed` and
-  `tpm_verify_quote_endorsed`. Either way the result rests on the endorser,
-  so `accept` names it.
+  `Endorser` anchor reads every CoRIM triple. `*_appraise_endorsed` (SNP,
+  TDX, CCA, `spdm_appraise_endorsed(v, policy, refs, env)`, TPM, NSM)
+  accept what a reference value corroborates; `snp_corim(v, refs)` and the
+  like give the accepted claims set for `corim_corroborated`,
+  `corim_holds` (endorsed flags, versions) and `corim_endorsements`.
+  Attest-key triples replace a pinned key in `cca_verify_endorsed` and
+  `tpm_verify_quote_endorsed`, identity triples a device chain in
+  `spdm_verify_endorsed`. Either way the result rests on the endorser, so
+  `accept` names it.
 - **Devices bound to a guest**: the guest's report carries
   `challenge_session_value(challenge_value(c), s.value.th)` for an SPDM
-  session `s`; `snp_verify_device_bound` / `tdx_verify_quote_device_bound`
+  session `s`; `snp_verify_device_bound`, `tdx_verify_quote_device_bound`,
+  `nsm_verify_device_bound`, `cca_verify_device_bound` and the TPM forms
   check it, and the result rests on both anchors. The requester's session
   keys and secured messages are `lib/spdm_session.resid`.
 - **Assumptions**: `assume(x, a)` with an application's
